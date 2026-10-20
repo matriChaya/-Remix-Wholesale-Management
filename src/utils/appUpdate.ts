@@ -15,7 +15,7 @@ export interface AppVersionData {
   currentTime?: number;
 }
 
-export const APP_CURRENT_FALLBACK_VERSION = 'v3.0.0 Ultra';
+export const APP_CURRENT_FALLBACK_VERSION = 'v4.0.0 Pro Latest';
 const STORAGE_KEY_BUILD_TS = 'dealer_erp_active_build_ts';
 const STORAGE_KEY_VERSION = 'dealer_erp_active_version';
 const STORAGE_KEY_LAST_CHECK = 'dealer_erp_last_update_check_time';

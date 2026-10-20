@@ -39,7 +39,14 @@ import {
   Laptop,
   Truck,
   Shield,
-  Cloud
+  Cloud,
+  Upload,
+  History,
+  HardDrive,
+  Layers,
+  X,
+  Eye,
+  FolderArchive
 } from 'lucide-react';
 
 interface DashboardOverviewProps {
@@ -109,13 +116,57 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
     pullFromGoogleDrive,
     syncToGoogleDrive,
     openFleetModal,
+    isAppRunningViaDrive,
+    hasCloudQuotaNotice,
+    cloudQuotaMessage,
+    uploadPendingQueueToGoogleDriveNow,
+    pushDriveToCloudAccount,
+    retrievePastAccountsFromCloudOrDrive,
   } = useWholesale();
 
   const [isRestoringData, setIsRestoringData] = useState<boolean>(false);
   const [isPullingDrive, setIsPullingDrive] = useState<boolean>(false);
+  const [isUploadingToDrive, setIsUploadingToDrive] = useState<boolean>(false);
+  const [isPushingCloud, setIsPushingCloud] = useState<boolean>(false);
+  const [isRetrievingHistory, setIsRetrievingHistory] = useState<boolean>(false);
+  const [pastAccountsModal, setPastAccountsModal] = useState<boolean>(false);
+  const [pastBackupsList, setPastBackupsList] = useState<any[]>([]);
   const [driveSyncToast, setDriveSyncToast] = useState<string | null>(null);
 
   const totalPendingCount = (remotePendingDevices || []).reduce((sum, d) => sum + (d.pendingFilesCount || 0), 0);
+
+  const handleUploadPendingToDrive = async () => {
+    setIsUploadingToDrive(true);
+    try {
+      const res = await uploadPendingQueueToGoogleDriveNow();
+      setDriveSyncToast(res.message);
+      setTimeout(() => setDriveSyncToast(null), 5000);
+    } finally {
+      setIsUploadingToDrive(false);
+    }
+  };
+
+  const handlePushDriveToCloud = async () => {
+    setIsPushingCloud(true);
+    try {
+      const res = await pushDriveToCloudAccount();
+      setDriveSyncToast(res.message);
+      setTimeout(() => setDriveSyncToast(null), 5000);
+    } finally {
+      setIsPushingCloud(false);
+    }
+  };
+
+  const handleOpenPastAccounts = async () => {
+    setIsRetrievingHistory(true);
+    try {
+      const res = await retrievePastAccountsFromCloudOrDrive();
+      setPastBackupsList(res.pastBackups || []);
+      setPastAccountsModal(true);
+    } finally {
+      setIsRetrievingHistory(false);
+    }
+  };
 
   const handleQuickDriveSync = async () => {
     setIsPullingDrive(true);
@@ -347,8 +398,8 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
               </h3>
               <p className="text-[11px] text-slate-400">
                 {language === 'bn'
-                  ? 'এডমিন, ক্যাশ কাউন্টার ও ডিএসআর ডিভাইসগুলোর অনলাইন/অফলাইন অবস্থান'
-                  : 'Monitor live connection of Admin, Cash Counter, and DSR devices'}
+                  ? '৩-স্তরীয় হাইব্রিড স্টোরেজ (১ম মেমরি ফাস্ট এক্সপ্রেস • ২য় গুগল ড্রাইভ বাফার • ৩য় ক্লাউড আর্কাইভ) • v4.0.0 Pro'
+                  : '3-Tier Hybrid Storage (1st Memory Fast Express • 2nd Google Drive Buffer • 3rd Cloud Archive) • v4.0.0 Pro'}
               </p>
             </div>
           </div>
@@ -498,6 +549,161 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
             );
           })}
         </div>
+
+        {/* 3-Tier Hybrid Storage & Failover Architecture Hub */}
+        <div className="p-3.5 sm:p-4 rounded-xl bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 border border-slate-800 space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-2.5">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center text-xs font-bold">
+                ⚡
+              </div>
+              <div>
+                <span className="text-xs font-bold text-white flex items-center gap-2">
+                  <span>{language === 'bn' ? 'ফাস্ট এক্সপ্রেস ৩-স্তর হাইব্রিড স্টোরেজ পাইপলাইন' : 'Fast Express 3-Tier Storage Pipeline'}</span>
+                  <span className="text-[9px] px-2 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 font-mono font-bold border border-emerald-500/30">
+                    v4.0.0 Latest
+                  </span>
+                </span>
+                <p className="text-[10px] text-slate-400">
+                  {language === 'bn'
+                    ? '১ম স্তর (ডিভাইস মেমরি) ➔ ২য় স্তর (গুগল ড্রাইভ বাফার) ➔ ৩য় স্তর (ক্লাউড অ্যাকাউন্ট হিস্ট্রি)'
+                    : 'Tier 1 (Internal Memory) ➔ Tier 2 (Google Drive Buffer) ➔ Tier 3 (Cloud Account Archive)'}
+                </p>
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button
+                type="button"
+                onClick={handleOpenPastAccounts}
+                disabled={isRetrievingHistory}
+                className="px-2.5 py-1 rounded-lg bg-indigo-600/80 hover:bg-indigo-600 text-white text-[11px] font-bold flex items-center gap-1.5 transition active:scale-95 cursor-pointer shadow-sm"
+                title={language === 'bn' ? '৩য় স্তর ক্লাউড ও ড্রাইভ থেকে পূর্বের হিসাব সহজে রিট্রিভ করুন' : 'Retrieve Past Accounts from Cloud & Drive'}
+              >
+                <History className={`w-3 h-3 ${isRetrievingHistory ? 'animate-spin' : ''}`} />
+                <span>{language === 'bn' ? 'পূর্বের হিসাব রিট্রিভ' : 'Past Records'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleUploadPendingToDrive}
+                disabled={isUploadingToDrive || !isGoogleDriveConnected}
+                className="px-2.5 py-1 rounded-lg bg-sky-700/80 hover:bg-sky-600 text-white text-[11px] font-bold flex items-center gap-1.5 transition active:scale-95 cursor-pointer shadow-sm disabled:opacity-50"
+                title={language === 'bn' ? 'পেন্ডিং ফাইলগুলো সরাসরি গুগল ড্রাইভে বাফার/আপলোড করুন' : 'Buffer Pending Queue to Google Drive'}
+              >
+                <Upload className={`w-3 h-3 ${isUploadingToDrive ? 'animate-spin' : ''}`} />
+                <span>{language === 'bn' ? 'ড্রাইভে পেন্ডিং আপলোড' : 'Pending to Drive'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handlePushDriveToCloud}
+                disabled={isPushingCloud || !isGoogleDriveConnected}
+                className="px-2.5 py-1 rounded-lg bg-purple-700/80 hover:bg-purple-600 text-white text-[11px] font-bold flex items-center gap-1.5 transition active:scale-95 cursor-pointer shadow-sm disabled:opacity-50"
+                title={language === 'bn' ? 'গুগল ড্রাইভ থেকে ৩য় স্তর ক্লাউড অ্যাকাউন্টে পুশ ও হিস্ট্রি সংরক্ষণ' : 'Push Drive Data to Cloud Account'}
+              >
+                <RefreshCw className={`w-3 h-3 ${isPushingCloud ? 'animate-spin' : ''}`} />
+                <span>{language === 'bn' ? 'ড্রাইভ ➔ ক্লাউড পুশ' : 'Drive to Cloud'}</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 3 Tier Grid Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+            {/* Tier 1 Card */}
+            <div className="p-2.5 rounded-lg bg-slate-900/90 border border-emerald-500/30 flex items-start gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 font-bold text-xs mt-0.5">
+                ⚡১
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-white truncate">
+                    {language === 'bn' ? 'ডিভাইস মেমরি (ফাস্ট এক্সপ্রেস)' : 'Tier 1: Device Memory'}
+                  </span>
+                  <span className="text-[9px] font-bold text-emerald-400 bg-emerald-500/20 px-1.5 py-0.2 rounded">
+                    সক্রিয়
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-300 mt-0.5 leading-tight">
+                  {language === 'bn'
+                    ? 'প্রতিটি ডিভাইসের নিজস্ব মেমরিতে তাৎক্ষণিক এন্ট্রি (<10ms)। কোনো নেটওয়ার্ক বিলম্ব নেই।'
+                    : 'Instant internal memory storage (<10ms). Instant launch with zero network lag.'}
+                </p>
+              </div>
+            </div>
+
+            {/* Tier 2 Card */}
+            <div className={`p-2.5 rounded-lg border flex items-start gap-2.5 ${
+              isGoogleDriveConnected
+                ? 'bg-slate-900/90 border-sky-500/40'
+                : 'bg-slate-900/60 border-slate-800'
+            }`}>
+              <div className="w-7 h-7 rounded-lg bg-sky-500/20 text-sky-400 flex items-center justify-center shrink-0 font-bold text-xs mt-0.5">
+                ☁️২
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-white truncate">
+                    {language === 'bn' ? 'গুগল ড্রাইভ (প্রাইমারি বাফার)' : 'Tier 2: Google Drive'}
+                  </span>
+                  <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
+                    isGoogleDriveConnected ? 'text-sky-300 bg-sky-500/20' : 'text-slate-400 bg-slate-800'
+                  }`}>
+                    {isGoogleDriveConnected ? (language === 'bn' ? 'সংযুক্ত (১৫GB)' : 'Connected (15GB)') : (language === 'bn' ? 'সংযুক্ত নয়' : 'Not Connected')}
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-300 mt-0.5 leading-tight">
+                  {language === 'bn'
+                    ? 'ক্লাউড ফুল থাকলেও ড্রাইভের কারণে অ্যাপ শতভাগ রানিং থাকে ও পেন্ডিং ফাইল ড্রাইভে আপলোড হয়।'
+                    : 'Unlimited buffer: If cloud quota is full, Google Drive keeps app 100% running.'}
+                </p>
+              </div>
+            </div>
+
+            {/* Tier 3 Card */}
+            <div className={`p-2.5 rounded-lg border flex items-start gap-2.5 ${
+              hasCloudQuotaNotice
+                ? 'bg-amber-950/40 border-amber-500/40'
+                : 'bg-slate-900/90 border-purple-500/30'
+            }`}>
+              <div className="w-7 h-7 rounded-lg bg-purple-500/20 text-purple-400 flex items-center justify-center shrink-0 font-bold text-xs mt-0.5">
+                🌐৩
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-white truncate">
+                    {language === 'bn' ? 'ক্লাউড একাউন্ট (পূর্বের হিসাব)' : 'Tier 3: Cloud Account'}
+                  </span>
+                  <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
+                    hasCloudQuotaNotice ? 'text-amber-300 bg-amber-500/20' : 'text-purple-300 bg-purple-500/20'
+                  }`}>
+                    {hasCloudQuotaNotice ? (language === 'bn' ? 'ড্রাইভে সংরক্ষিত' : 'Drive Protected') : (language === 'bn' ? 'সংযুক্ত' : 'Connected')}
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-300 mt-0.5 leading-tight">
+                  {language === 'bn'
+                    ? '৩য় স্থান হিসেবে সংযোগ রেখে পূর্বের হিসাব ও হিস্ট্রি সহজে উদ্ধার ও সমন্বয় করা যায়।'
+                    : 'Master archive bridge: easily retrieve past records & cross-device history.'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Cloud Quota Safeguard Reassurance Alert */}
+          {hasCloudQuotaNotice && (
+            <div className="p-2.5 rounded-lg bg-amber-950/60 border border-amber-500/40 flex items-center justify-between gap-2 text-xs text-amber-200 animate-in fade-in">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="text-sm">🛡️</span>
+                <span className="text-[11px] leading-tight">
+                  <strong>{language === 'bn' ? 'ড্রাইভ সুরক্ষা সক্রিয়:' : 'Drive Safeguard Active:'}</strong>{' '}
+                  {cloudQuotaMessage}
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+
 
         {/* Pending Offline Files Alert Banner */}
         {totalPendingCount > 0 && (
@@ -1104,6 +1310,113 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
           onViewAll={() => onNavigateTab('transfers')}
         />
       </div>
+
+      {/* Past Accounts & Archives Retriever Modal (Tier 3 Cloud & Tier 2 Google Drive) */}
+      {pastAccountsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl shadow-2xl flex flex-col max-h-[85vh] overflow-hidden text-slate-100">
+            {/* Header */}
+            <div className="px-5 py-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-950 text-indigo-400 border border-indigo-500/30 flex items-center justify-center shrink-0">
+                  <FolderArchive className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                    <span>{language === 'bn' ? 'পূর্বের হিসাব ও ব্যাকআপ হিস্ট্রি' : 'Past Accounts & History Archive'}</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-mono">
+                      {pastBackupsList.length} {language === 'bn' ? 'টি আর্কাইভ' : 'archives'}
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    {language === 'bn'
+                      ? '৩য় স্তর ক্লাউড অ্যাকাউন্ট ও ২য় স্তর গুগল ড্রাইভ থেকে সংরক্ষিত পূর্বের মেমো, লেজার ও হিস্ট্রি'
+                      : 'Retrieved point-in-time archives from Tier 3 Cloud Account & Tier 2 Google Drive'}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPastAccountsModal(false)}
+                className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Content List */}
+            <div className="p-4 overflow-y-auto space-y-2.5 flex-1 divide-y divide-slate-800/60">
+              {pastBackupsList.length === 0 ? (
+                <div className="p-8 text-center text-slate-400 text-xs">
+                  <History className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+                  <p>{language === 'bn' ? 'কোনো পূর্বের ব্যাকআপ আর্কাইভ পাওয়া যায়নি।' : 'No past archives found in Drive or Cloud.'}</p>
+                </div>
+              ) : (
+                pastBackupsList.map((item, idx) => (
+                  <div key={item.id || idx} className="pt-2.5 first:pt-0 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-slate-200 truncate">{item.name}</span>
+                        <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${
+                          item.source?.includes('Google Drive')
+                            ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30'
+                            : 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                        }`}>
+                          {item.source}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        <span>🕒 {item.date ? new Date(item.date).toLocaleString('bn-BD') : 'তারিখ অনুপলব্ধ'}</span>
+                        {item.summary && <span className="ml-2 text-slate-500">• {item.summary}</span>}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      {item.webViewLink && (
+                        <a
+                          href={item.webViewLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-sky-400 text-[10px] font-bold flex items-center gap-1 transition"
+                        >
+                          <Eye className="w-3 h-3" />
+                          <span>{language === 'bn' ? 'ড্রাইভে দেখুন' : 'View in Drive'}</span>
+                        </a>
+                      )}
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setPastAccountsModal(false);
+                          await handleQuickDriveSync();
+                        }}
+                        className="px-2.5 py-1 rounded bg-emerald-700 hover:bg-emerald-600 text-white text-[10px] font-bold flex items-center gap-1 transition cursor-pointer shadow-sm"
+                        title="এই পূর্বের হিসাবের ডাটা বর্তমান অ্যাপ্লিকেশনের সাথে সমন্বয় করুন"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        <span>{language === 'bn' ? 'হিসাব সমন্বয়' : 'Merge Data'}</span>
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 py-3 bg-slate-950 border-t border-slate-800 flex items-center justify-between text-xs">
+              <span className="text-[11px] text-slate-400">
+                💡 {language === 'bn' ? 'ক্লাউড স্পেস ফুল থাকলেও গুগল ড্রাইভের মাধ্যমে যেকোনো তারিখের হিসাব নিরাপদে সংরক্ষিত থাকে।' : 'Past accounts remain safeguarded in Google Drive regardless of Cloud quotas.'}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPastAccountsModal(false)}
+                className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold"
+              >
+                {language === 'bn' ? 'বন্ধ করুন' : 'Close'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );

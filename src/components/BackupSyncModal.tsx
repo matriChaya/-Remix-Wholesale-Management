@@ -610,6 +610,66 @@ export const BackupSyncModal: React.FC = () => {
             </div>
           )}
 
+          {/* 3-Tier Smart Storage Engine Architecture Banner */}
+          <div className="p-4 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 rounded-2xl border border-indigo-500/30 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="text-base">🚀</span>
+                <div>
+                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                    <span>{language === 'bn' ? '৩-স্তরীয় স্মার্ট স্টোরেজ আর্কিটেকচার (লেটেস্ট v3.5.0)' : '3-Tier Smart Storage Engine (v3.5.0)'}</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
+                      High Availability
+                    </span>
+                  </h4>
+                  <p className="text-[11px] text-slate-300">
+                    {language === 'bn'
+                      ? 'ডিভাইস মেমোরি (ফাস্ট এক্সপ্রেস) ➔ গুগল ড্রাইভ (১৫ জিবি বাফার) ➔ ক্লাউড অ্যাকাউন্ট (মাস্টার আর্কাইভ)'
+                      : 'Device Memory (Fast Express) ➔ Google Drive (15 GB Buffer) ➔ Cloud Account (Master Archive)'}
+                  </p>
+                </div>
+              </div>
+              <span className="text-[11px] text-emerald-400 font-mono font-semibold bg-emerald-950/60 px-2.5 py-1 rounded-lg border border-emerald-500/30 self-start sm:self-auto">
+                ✓ {language === 'bn' ? 'অ্যাপ বিরতিহীন সচল' : 'App Always Running'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 text-xs">
+              {/* Tier 1 */}
+              <div className="p-3 bg-slate-900/90 rounded-xl border border-emerald-500/30">
+                <div className="flex items-center justify-between font-bold text-emerald-300 mb-1">
+                  <span>১ম স্তর: ডিভাইস মেমোরি</span>
+                  <span className="text-[10px] bg-emerald-900/50 px-1.5 py-0.5 rounded text-emerald-200">ফাস্ট এক্সপ্রেস</span>
+                </div>
+                <p className="text-[11px] text-slate-300 leading-relaxed">
+                  মোবাইল ও পিসির ইন্টারনাল স্টোরেজ (IndexedDB ও LocalStorage)। অফলাইন/অনলাইনে তাৎক্ষণিক স্পিড ও জিরো ল্যাগ।
+                </p>
+              </div>
+
+              {/* Tier 2 */}
+              <div className="p-3 bg-slate-900/90 rounded-xl border border-indigo-500/30">
+                <div className="flex items-center justify-between font-bold text-indigo-300 mb-1">
+                  <span>২য় স্তর: গুগল ড্রাইভ</span>
+                  <span className="text-[10px] bg-indigo-900/50 px-1.5 py-0.5 rounded text-indigo-200">১৫ জিবি বাফার</span>
+                </div>
+                <p className="text-[11px] text-slate-300 leading-relaxed">
+                  পেন্ডিং ফাইল ও সকল মেমোরির ক্লাউড বাফার। ক্লাউড অ্যাকাউন্টে জায়গা না থাকলেও ড্রাইভের কারণে অ্যাপ রানিং থাকে।
+                </p>
+              </div>
+
+              {/* Tier 3 */}
+              <div className="p-3 bg-slate-900/90 rounded-xl border border-sky-500/30">
+                <div className="flex items-center justify-between font-bold text-sky-300 mb-1">
+                  <span>৩য় স্তর: ক্লাউড অ্যাকাউন্ট</span>
+                  <span className="text-[10px] bg-sky-900/50 px-1.5 py-0.5 rounded text-sky-200">মাস্টার আর্কাইভ</span>
+                </div>
+                <p className="text-[11px] text-slate-300 leading-relaxed">
+                  ফায়ারবেজ ফায়ারস্টোর। পূর্বের সকল হিসাব ও লেনদেন সহজেই খোঁজা, মাল্টি-ডিভাইস রিয়েল-টাইম অনলাইন ট্র্যাকিং।
+                </p>
+              </div>
+            </div>
+          </div>
+
           {/* 1. Live Connectivity & Offline Queue Status Card */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {/* Status 1: Network */}
@@ -674,6 +734,70 @@ export const BackupSyncModal: React.FC = () => {
                 <span className="text-xs font-semibold text-slate-200 block truncate">
                   {formatTimestamp(lastBackupTime)}
                 </span>
+              </div>
+            </div>
+          </div>
+
+          {/* 3-Tier Hybrid Storage Architecture Summary */}
+          <div className="p-4 bg-slate-900 rounded-2xl border border-slate-800 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center font-bold">
+                  ⚡
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                    <span>{language === 'bn' ? 'ফাস্ট এক্সপ্রেস ৩-স্তর হাইব্রিড স্টোরেজ' : 'Fast Express 3-Tier Storage Pipeline'}</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-mono font-bold">
+                      v4.0.0
+                    </span>
+                  </h4>
+                  <p className="text-[11px] text-slate-400">
+                    {language === 'bn'
+                      ? '১. ডিভাইস মেমরি (ফাস্ট এক্সপ্রেস) ➔ ২. গুগল ড্রাইভ (প্রাইমারি বাফার) ➔ ৩. ক্লাউড অ্যাকাউন্ট (হিস্ট্রি আর্কাইভ)'
+                      : '1. Device Memory ➔ 2. Google Drive Buffer ➔ 3. Cloud Account Archive'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+              <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800">
+                <div className="flex items-center justify-between font-bold text-emerald-300 text-xs mb-1">
+                  <span>⚡ ১ম: ডিভাইস মেমরি</span>
+                  <span className="text-[9px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.2 rounded font-mono">সক্রিয়</span>
+                </div>
+                <p className="text-[11px] text-slate-300">
+                  {language === 'bn'
+                    ? 'প্রতিটি ডিভাইসের নিজস্ব মেমরিতে তাৎক্ষণিক এন্ট্রি। অফলাইন বা অনলাইনে সবসময় ইনস্ট্যান্ট স্পিড।'
+                    : 'Zero lag: Instant local writes and offline persistence on device memory.'}
+                </p>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800">
+                <div className="flex items-center justify-between font-bold text-sky-300 text-xs mb-1">
+                  <span>☁️ ২য়: গুগল ড্রাইভ</span>
+                  <span className="text-[9px] bg-sky-500/20 text-sky-300 px-1.5 py-0.2 rounded font-mono">
+                    {gDriveState.isConnected ? 'সংযুক্ত' : 'প্রস্তুত'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-300">
+                  {language === 'bn'
+                    ? 'ক্লাউডে জায়গা না থাকলেও গুগল ড্রাইভের কারণে অ্যাপটি রানিং থাকবে ও পেন্ডিং ফাইল ড্রাইভে আপলোড হবে।'
+                    : 'Failover buffer: Keeps app 100% operational if cloud is full; buffers pending files.'}
+                </p>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-950/70 border border-slate-800">
+                <div className="flex items-center justify-between font-bold text-purple-300 text-xs mb-1">
+                  <span>🌐 ৩য়: ক্লাউড অ্যাকাউন্ট</span>
+                  <span className="text-[9px] bg-purple-500/20 text-purple-300 px-1.5 py-0.2 rounded font-mono">সংযুক্ত</span>
+                </div>
+                <p className="text-[11px] text-slate-300">
+                  {language === 'bn'
+                    ? '৩য় স্থান হিসেবে সংযোগ বজায় রেখে পূর্বের সকল হিসাব ও হিস্ট্রি লাইব্রেরি সহজে উদ্ধার করা যায়।'
+                    : 'Master historical library: effortlessly retrieve past accounts across all devices.'}
+                </p>
               </div>
             </div>
           </div>

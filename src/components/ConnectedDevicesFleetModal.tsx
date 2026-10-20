@@ -37,11 +37,55 @@ export const ConnectedDevicesFleetModal: React.FC<ConnectedDevicesFleetModalProp
     adminUploadDevicePending,
     adminClearDevicePending,
     sendPresenceHeartbeat,
+    uploadPendingQueueToGoogleDriveNow,
+    pushDriveToCloudAccount,
+    isGoogleDriveConnected,
+    hasCloudQuotaNotice,
   } = useWholesale();
 
   const [expandedDeviceId, setExpandedDeviceId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string; downloadUrl?: string } | null>(null);
+
+  const handleBufferAllToDrive = async () => {
+    setIsProcessing(true);
+    setFeedback(null);
+    try {
+      const res = await uploadPendingQueueToGoogleDriveNow();
+      setFeedback({
+        type: res.success ? 'success' : 'error',
+        message: res.message,
+      });
+      await refreshRegisteredDevices();
+    } catch (err: any) {
+      setFeedback({
+        type: 'error',
+        message: err.message || 'গুগল ড্রাইভে পেন্ডিং ফাইল আপলোড করতে সমস্যা হয়েছে।',
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handlePushAllToCloud = async () => {
+    setIsProcessing(true);
+    setFeedback(null);
+    try {
+      const res = await pushDriveToCloudAccount();
+      setFeedback({
+        type: res.success ? 'success' : 'error',
+        message: res.message,
+      });
+      await refreshRegisteredDevices();
+    } catch (err: any) {
+      setFeedback({
+        type: 'error',
+        message: err.message || 'ক্লাউডে সিঙ্ক করতে সমস্যা হয়েছে।',
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -231,6 +275,47 @@ export const ConnectedDevicesFleetModal: React.FC<ConnectedDevicesFleetModalProp
               <span className="text-[11px] text-slate-400 block">{isBn ? 'এডমিন ফোন' : 'Admin Account'}</span>
               <span className="text-xs sm:text-sm font-bold text-purple-300 font-mono">{adminPhone}</span>
             </div>
+          </div>
+        </div>
+
+        {/* 3-Tier Hybrid Storage & Google Drive Resilience Strip */}
+        <div className="mx-5 mt-4 p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+          <div className="space-y-0.5">
+            <div className="flex items-center gap-1.5 font-bold text-white">
+              <span>⚡১. ডিভাইস মেমরি ➔ ☁️২. গুগল ড্রাইভ ➔ 🌐৩. ক্লাউড একাউন্ট</span>
+              <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-mono">
+                v4.0.0
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              {isBn
+                ? 'ক্লাউড একাউন্টে পর্যাপ্ত জায়গা না থাকলেও গুগল ড্রাইভের কারণে অ্যাপটি রানিং থাকবে এবং পেন্ডিং ফাইলগুলো গুগল ড্রাইভে আপলোড হবে।'
+                : 'Even if cloud storage is limited, Google Drive keeps the app 100% running and pending files safely buffer to Drive.'}
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0 flex-wrap">
+            <button
+              type="button"
+              onClick={handleBufferAllToDrive}
+              disabled={isProcessing || !isGoogleDriveConnected}
+              className="px-3 py-1.5 rounded-xl bg-sky-700 hover:bg-sky-600 text-white font-bold text-xs flex items-center gap-1.5 transition active:scale-95 disabled:opacity-50 cursor-pointer shadow-sm"
+              title="সকল পেন্ডিং ফাইল গুগল ড্রাইভে বাফার করুন"
+            >
+              <UploadCloud className="w-3.5 h-3.5" />
+              <span>{isBn ? 'ড্রাইভে পেন্ডিং বাফার' : 'Buffer to Drive'}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handlePushAllToCloud}
+              disabled={isProcessing || !isGoogleDriveConnected}
+              className="px-3 py-1.5 rounded-xl bg-purple-700 hover:bg-purple-600 text-white font-bold text-xs flex items-center gap-1.5 transition active:scale-95 disabled:opacity-50 cursor-pointer shadow-sm"
+              title="গুগল ড্রাইভ থেকে ক্লাউডে পুশ ও হিস্ট্রি সিঙ্ক"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>{isBn ? 'ড্রাইভ ➔ ক্লাউড সিঙ্ক' : 'Push to Cloud'}</span>
+            </button>
           </div>
         </div>
 

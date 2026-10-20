@@ -180,15 +180,15 @@ app.get("/api/download/file/:id/:filename", (req, res) => {
 });
 
 // App Version & Deployment Info for PWA & Client In-App Updater
-const APP_VERSION = "3.0.0";
+const APP_VERSION = "4.0.0";
 // Current updated build timestamp to trigger live PWA update detection across devices
-const SERVER_BOOT_TIMESTAMP = 1760700000000;
+const SERVER_BOOT_TIMESTAMP = Date.now();
 const BUILD_INFO = {
   version: APP_VERSION,
   buildTime: new Date().toISOString(),
   buildTimestamp: SERVER_BOOT_TIMESTAMP,
-  releaseName: "মাতৃছায়া টেলিকম ডিলার ইআরপি আল্ট্রা (v3.0.0) - ফুল অ্যান্ড ফাইনাল সেটআপ",
-  releaseNotes: "এডমিন (01937200635), ক্যাশ কাউন্টার (01949663733), ডিএসআর (01615154653) লাইভ অটো-সিঙ্ক, গুগল ড্রাইভ ১৫ জিবি ব্যাকআপ, মোবাইল ইনস্টল ফিক্স ও লাইভ ডিভাইস উপস্থিতি মনিটর",
+  releaseName: "মাতৃছায়া টেলিকম ডিলার ইআরপি লেটেস্ট (v4.0.0 Pro) - ৩-স্তরীয় হাইব্রিড স্টোরেজ সংস্করণ",
+  releaseNotes: "১ম স্তর: ডিভাইস মেমরি (ফাস্ট এক্সপ্রেস • জিরো ল্যাগ), ২য় স্তর: গুগল ড্রাইভ (১৫ জিবি বাফার • ক্লাউডে পর্যাপ্ত জায়গা না থাকলেও গুগল ড্রাইভের কারণে অ্যাপটি রানিং থাকবে ও পেন্ডিং ফাইল ড্রাইভে আপলোড হবে), ৩য় স্তর: ক্লাউড অ্যাকাউন্ট (মাস্টার আর্কাইভ ও পূর্বের হিসাব সহজে উদ্ধার)",
 };
 
 app.get("/api/app/version", (_req, res) => {

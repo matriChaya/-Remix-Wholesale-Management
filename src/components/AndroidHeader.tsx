@@ -89,6 +89,9 @@ export const AndroidHeader: React.FC<AndroidHeaderProps> = ({
     openBackupModal,
     openFleetModal,
     remotePendingDevices,
+    isAppRunningViaDrive,
+    hasCloudQuotaNotice,
+    isGoogleDriveConnected,
     cashAdmin,
     cashCounter,
     cashDSR,
@@ -452,19 +455,29 @@ export const AndroidHeader: React.FC<AndroidHeaderProps> = ({
               <button
                 type="button"
                 onClick={onOpenUpdateModal}
-                title={language === 'bn' ? 'সফটওয়্যার আপডেট ও ভার্সন কেন্দ্র' : 'Check Software Updates'}
-                className={`text-[10px] uppercase font-semibold px-1.5 py-0.5 rounded-full border transition cursor-pointer ${
+                title={language === 'bn' ? 'সফটওয়্যার আপডেট ও ৩-স্তর স্টোরেজ ভার্সন কেন্দ্র' : 'Check Software Updates'}
+                className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded-full border transition cursor-pointer flex items-center gap-1 ${
                   isUpdateAvailable
                     ? 'bg-amber-500/30 text-amber-300 border-amber-500/50 animate-pulse'
-                    : 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/30'
+                    : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30'
                 }`}
               >
-                v2.7 Pro
+                <span>v4.0.0 Pro</span>
               </button>
             </h1>
-            <p className="text-[11px] text-slate-400 truncate">
-              {currentUser.name} {currentUser.shopName ? `• ${currentUser.shopName}` : ''}
-            </p>
+            <div className="flex items-center gap-2 text-[10px] text-slate-400 truncate">
+              <span className="truncate">
+                {currentUser.name} {currentUser.shopName ? `• ${currentUser.shopName}` : ''}
+              </span>
+              <span className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-slate-900 border border-slate-700/80 text-emerald-400 font-mono text-[9px]" title="১ম স্তর: ডিভাইস মেমরি ➔ ২য় স্তর: গুগল ড্রাইভ ➔ ৩য় স্তর: ক্লাউড অ্যাকাউন্ট">
+                ⚡১. মেমরি ➔ ☁️২. ড্রাইভ ➔ 🌐৩. ক্লাউড
+              </span>
+              {hasCloudQuotaNotice && (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[9px] font-semibold animate-pulse" title="ক্লাউড স্পেস পর্যাপ্ত না থাকলেও গুগল ড্রাইভের কারণে অ্যাপটি শতভাগ সচল রয়েছে">
+                  ☁️ ড্রাইভ রানিং
+                </span>
+              )}
+            </div>
           </div>
         </div>
 

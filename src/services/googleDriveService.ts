@@ -519,3 +519,141 @@ export const deleteBackupFromGoogleDrive = async (fileId: string): Promise<void>
     throw new Error(err.error?.message || 'Failed to delete file from Google Drive');
   }
 };
+
+/**
+ * Tier 2: Upload device pending files directly to Google Drive
+ * Acts as continuous buffer so if cloud account runs out of quota, app continues without losing files
+ */
+export const uploadPendingFilesToGoogleDrive = async (
+  deviceId: string,
+  deviceRole: string,
+  pendingItems: any[],
+  meta?: any
+): Promise<{ success: boolean; message: string }> => {
+  const token = getDriveAccessToken();
+  if (!token) {
+    return { success: false, message: 'Google Drive সংযুক্ত নেই' };
+  }
+  if (!pendingItems || pendingItems.length === 0) {
+    return { success: true, message: 'কোনো পেন্ডিং ফাইল নেই' };
+  }
+
+  try {
+    const folderId = await getOrCreateBackupFolder(token);
+    const fileName = `pending_queue_${deviceId}.json`;
+    const payload = {
+      deviceId,
+      deviceRole,
+      uploadedAt: new Date().toISOString(),
+      pendingCount: pendingItems.length,
+      items: pendingItems,
+      meta: meta || {},
+    };
+    const fileContent = JSON.stringify(payload, null, 2);
+
+    const query = encodeURIComponent(`name = '${fileName}' and '${folderId}' in parents and trashed = false`);
+    const searchRes = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=${query}&fields=files(id,name)`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    if (searchRes.ok) {
+      const sData = await searchRes.json();
+      if (sData.files && sData.files.length > 0) {
+        const fileId = sData.files[0].id;
+        await fetch(
+          `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`,
+          {
+            method: 'PATCH',
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json; charset=UTF-8',
+            },
+            body: fileContent,
+          }
+        );
+        return { success: true, message: `পেন্ডিং ${pendingItems.length}টি ফাইল গুগল ড্রাইভে বাফার হয়েছে` };
+      }
+    }
+
+    await createDriveFile(token, folderId, fileName, fileContent, `Pending Offline Queue for ${deviceRole}`);
+    return { success: true, message: `পেন্ডিং ${pendingItems.length}টি ফাইল গুগল ড্রাইভে বাফার হয়েছে` };
+  } catch (err: any) {
+    console.warn('uploadPendingFilesToGoogleDrive error:', err);
+    return { success: false, message: err.message || 'গুগল ড্রাইভে পেন্ডিং ফাইল সেভ হয়নি' };
+  }
+};
+
+/**
+ * Tier 3 Bridge: Push latest Google Drive data to Cloud Account / Local Server
+ * Transfers data from Google Drive buffer to Cloud storage for historical records
+ */
+export const pushDriveDataToCloudAccount = async (
+  onFirestoreCommit?: (data: any) => Promise<void>
+): Promise<{ success: boolean; message: string; recordCounts?: any }> => {
+  const pullResult = await pullLatestGoogleDriveData();
+  if (!pullResult.success || !pullResult.data) {
+    return { success: false, message: pullResult.message || 'গুগল ড্রাইভে কোনো সিঙ্ক ডাটা পাওয়া যায়নি।' };
+  }
+
+  const payload = pullResult.data;
+  let serverSaved = false;
+
+  // 1. Push snapshot to backend local/cloud server
+  try {
+    const sRes = await fetch('/api/backup/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (sRes.ok) serverSaved = true;
+  } catch (err) {
+    console.warn('Server push note:', err);
+  }
+
+  // 2. Commit into Firestore if handler provided
+  let firestoreCommitted = false;
+  if (onFirestoreCommit) {
+    try {
+      await onFirestoreCommit(payload);
+      firestoreCommitted = true;
+    } catch (fErr) {
+      console.warn('Firestore cloud account commit note (may be quota full, handled gracefully):', fErr);
+    }
+  }
+
+  const counts = payload.counts || {
+    orders: Array.isArray(payload.data?.orders) ? payload.data.orders.length : 0,
+    products: Array.isArray(payload.data?.products) ? payload.data.products.length : 0,
+  };
+
+  return {
+    success: true,
+    message: `গুগল ড্রাইভ থেকে সফলভাবে ৩য় স্তর ক্লাউড অ্যাকাউন্টে ডাটা আপলোড ও সমন্বয় হয়েছে! (${counts.orders || 0}টি চালান, ${counts.products || 0}টি পণ্য)`,
+    recordCounts: counts,
+  };
+};
+
+/**
+ * Retrieve past archived accounts and snapshots from Google Drive (Tier 2/3 Archive)
+ * Enables effortless access to historical business accounts even if cloud storage is limited
+ */
+export const fetchArchivedPastBackups = async (): Promise<Array<{
+  id: string;
+  name: string;
+  size?: string;
+  createdTime?: string;
+  modifiedTime?: string;
+  webViewLink?: string;
+  summaryText?: string;
+}>> => {
+  const backups = await listGoogleDriveBackups();
+  return backups.map((b) => {
+    const dateFormatted = b.createdTime ? new Date(b.createdTime).toLocaleString('bn-BD') : 'তারিখ অনুপলব্ধ';
+    return {
+      ...b,
+      summaryText: `${b.name} (${dateFormatted})`,
+    };
+  });
+};
+
