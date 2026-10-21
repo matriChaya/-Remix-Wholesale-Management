@@ -1,29 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, Suspense, lazy } from 'react';
 import { WholesaleProvider, useWholesale } from './context/WholesaleContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { translations } from './utils/translations';
 import { AndroidHeader } from './components/AndroidHeader';
-import { RoleSelectorModal } from './components/RoleSelectorModal';
-import { ScannerModal } from './components/ScannerModal';
-import { PhonebookPickerModal } from './components/PhonebookPickerModal';
-import { CashTransferModal } from './components/CashTransferModal';
 import { BiometricLockOverlay } from './components/BiometricLockOverlay';
-import { BiometricSettingsModal } from './components/BiometricSettingsModal';
 import { NetworkStatusNotifier } from './components/NetworkStatusNotifier';
 import { AuthModal } from './components/AuthModal';
 import { LoginScreen } from './components/LoginScreen';
-import { AdminRefSwitcherModal } from './components/AdminRefSwitcherModal';
-import { AdminInvestModal } from './components/AdminInvestModal';
-import { AdminCompanyPaymentModal } from './components/AdminCompanyPaymentModal';
-import { PayAdminModal } from './components/PayAdminModal';
-import { AddSupplierModal } from './components/AddSupplierModal';
-import { EditBalanceModal } from './components/EditBalanceModal';
-import { StaffManagementModal } from './components/StaffManagementModal';
-import { MultiDeviceStaffSyncModal } from './components/MultiDeviceStaffSyncModal';
-import { SystemResetModal } from './components/SystemResetModal';
-import { InstallGuideModal } from './components/InstallGuideModal';
-import { BackupSyncModal } from './components/BackupSyncModal';
-import { ConnectedDevicesFleetModal } from './components/ConnectedDevicesFleetModal';
 import { DashboardOverview } from './components/DashboardOverview';
 import { PosInvoiceView } from './components/PosInvoiceView';
 import { CashTransferLog } from './components/CashTransferLog';
@@ -32,17 +15,36 @@ import { CapitalTrackerView } from './components/CapitalTrackerView';
 import { ReplacementAdjustmentView } from './components/ReplacementAdjustmentView';
 import { RetailerPortalView } from './components/RetailerPortalView';
 import { DealerDrawer } from './components/DealerDrawer';
-import { AllStatementsModal } from './components/AllStatementsModal';
-import { PdfPreviewModal } from './components/PdfPreviewModal';
-import { BusinessProfileModal } from './components/BusinessProfileModal';
-import { MemoKhataScannerModal } from './components/MemoKhataScannerModal';
-import { AppUpdateModal } from './components/AppUpdateModal';
 import { AppUpdateBanner } from './components/AppUpdateBanner';
 import { MobilePWAInstallBanner } from './components/MobilePWAInstallBanner';
-import { CashDrawerStatementModal } from './components/CashDrawerStatementModal';
-import { ExpenseModal } from './components/ExpenseModal';
 import { useAppUpdate } from './utils/appUpdate';
 import { PdfDocumentResult } from './utils/pdfExport';
+
+// Code-split heavy modals to ensure sub-100ms ultra-fast application startup
+const RoleSelectorModal = lazy(() => import('./components/RoleSelectorModal').then(m => ({ default: m.RoleSelectorModal })));
+const ScannerModal = lazy(() => import('./components/ScannerModal').then(m => ({ default: m.ScannerModal })));
+const PhonebookPickerModal = lazy(() => import('./components/PhonebookPickerModal').then(m => ({ default: m.PhonebookPickerModal })));
+const CashTransferModal = lazy(() => import('./components/CashTransferModal').then(m => ({ default: m.CashTransferModal })));
+const BiometricSettingsModal = lazy(() => import('./components/BiometricSettingsModal').then(m => ({ default: m.BiometricSettingsModal })));
+const AdminRefSwitcherModal = lazy(() => import('./components/AdminRefSwitcherModal').then(m => ({ default: m.AdminRefSwitcherModal })));
+const AdminInvestModal = lazy(() => import('./components/AdminInvestModal').then(m => ({ default: m.AdminInvestModal })));
+const AdminCompanyPaymentModal = lazy(() => import('./components/AdminCompanyPaymentModal').then(m => ({ default: m.AdminCompanyPaymentModal })));
+const PayAdminModal = lazy(() => import('./components/PayAdminModal').then(m => ({ default: m.PayAdminModal })));
+const AddSupplierModal = lazy(() => import('./components/AddSupplierModal').then(m => ({ default: m.AddSupplierModal })));
+const EditBalanceModal = lazy(() => import('./components/EditBalanceModal').then(m => ({ default: m.EditBalanceModal })));
+const StaffManagementModal = lazy(() => import('./components/StaffManagementModal').then(m => ({ default: m.StaffManagementModal })));
+const MultiDeviceStaffSyncModal = lazy(() => import('./components/MultiDeviceStaffSyncModal').then(m => ({ default: m.MultiDeviceStaffSyncModal })));
+const SystemResetModal = lazy(() => import('./components/SystemResetModal').then(m => ({ default: m.SystemResetModal })));
+const InstallGuideModal = lazy(() => import('./components/InstallGuideModal').then(m => ({ default: m.InstallGuideModal })));
+const BackupSyncModal = lazy(() => import('./components/BackupSyncModal').then(m => ({ default: m.BackupSyncModal })));
+const ConnectedDevicesFleetModal = lazy(() => import('./components/ConnectedDevicesFleetModal').then(m => ({ default: m.ConnectedDevicesFleetModal })));
+const AllStatementsModal = lazy(() => import('./components/AllStatementsModal').then(m => ({ default: m.AllStatementsModal })));
+const PdfPreviewModal = lazy(() => import('./components/PdfPreviewModal').then(m => ({ default: m.PdfPreviewModal })));
+const BusinessProfileModal = lazy(() => import('./components/BusinessProfileModal').then(m => ({ default: m.BusinessProfileModal })));
+const MemoKhataScannerModal = lazy(() => import('./components/MemoKhataScannerModal').then(m => ({ default: m.MemoKhataScannerModal })));
+const AppUpdateModal = lazy(() => import('./components/AppUpdateModal').then(m => ({ default: m.AppUpdateModal })));
+const CashDrawerStatementModal = lazy(() => import('./components/CashDrawerStatementModal').then(m => ({ default: m.CashDrawerStatementModal })));
+const ExpenseModal = lazy(() => import('./components/ExpenseModal').then(m => ({ default: m.ExpenseModal })));
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -113,6 +115,8 @@ function MainAppContent() {
     expenseModalDefaultCategory,
     isFleetModalOpen,
     closeFleetModal,
+    isBackupModalOpen,
+    isStaffSyncModalOpen,
   } = useWholesale();
 
   const t = translations[language];
@@ -461,179 +465,218 @@ function MainAppContent() {
         )}
       </div>
 
-      {/* Global Modals */}
-      <RoleSelectorModal
-        isOpen={isRoleModalOpen}
-        onClose={() => setIsRoleModalOpen(false)}
-      />
+      {/* Global Modals - Rendered on-demand via Suspense */}
+      <Suspense fallback={null}>
+        {isRoleModalOpen && (
+          <RoleSelectorModal
+            isOpen={isRoleModalOpen}
+            onClose={() => setIsRoleModalOpen(false)}
+          />
+        )}
 
-      <ScannerModal
-        isOpen={isScannerModalOpen}
-        onClose={() => setIsScannerModalOpen(false)}
-      />
+        {isScannerModalOpen && (
+          <ScannerModal
+            isOpen={isScannerModalOpen}
+            onClose={() => setIsScannerModalOpen(false)}
+          />
+        )}
 
-      {/* Cash Counter & DSR Sales and Replacement Memo/Khata Scanner Modal */}
-      <MemoKhataScannerModal
-        isOpen={isMemoKhataScannerOpen}
-        onClose={closeMemoKhataScanner}
-        initialMode={memoKhataScannerInitialMode}
-      />
+        {/* Cash Counter & DSR Sales and Replacement Memo/Khata Scanner Modal */}
+        {isMemoKhataScannerOpen && (
+          <MemoKhataScannerModal
+            isOpen={isMemoKhataScannerOpen}
+            onClose={closeMemoKhataScanner}
+            initialMode={memoKhataScannerInitialMode}
+          />
+        )}
 
-      <PhonebookPickerModal
-        isOpen={isPhonebookModalOpen}
-        onClose={() => setIsPhonebookModalOpen(false)}
-      />
+        {isPhonebookModalOpen && (
+          <PhonebookPickerModal
+            isOpen={isPhonebookModalOpen}
+            onClose={() => setIsPhonebookModalOpen(false)}
+          />
+        )}
 
-      <CashTransferModal
-        isOpen={isCashTransferModalOpen}
-        onClose={() => setIsCashTransferModalOpen(false)}
-      />
+        {isCashTransferModalOpen && (
+          <CashTransferModal
+            isOpen={isCashTransferModalOpen}
+            onClose={() => setIsCashTransferModalOpen(false)}
+          />
+        )}
 
-      {/* Biometric & Security Settings Modal */}
-      <BiometricSettingsModal
-        isOpen={isBiometricSettingsOpen}
-        onClose={closeBiometricSettings}
-      />
+        {/* Biometric & Security Settings Modal */}
+        {isBiometricSettingsOpen && (
+          <BiometricSettingsModal
+            isOpen={isBiometricSettingsOpen}
+            onClose={closeBiometricSettings}
+          />
+        )}
 
-      {/* Authentication & Registration Gateway Modal */}
-      <AuthModal
-        isOpen={isAuthModalOpen}
-        onClose={closeAuthModal}
-      />
+        {/* Authentication & Registration Gateway Modal */}
+        {isAuthModalOpen && (
+          <AuthModal
+            isOpen={isAuthModalOpen}
+            onClose={closeAuthModal}
+          />
+        )}
 
-      {/* Admin Reference & Multi-Tenant Wholesaler Switcher */}
-      <AdminRefSwitcherModal
-        isOpen={isRefSwitcherOpen}
-        onClose={closeRefSwitcher}
-      />
+        {/* Admin Reference & Multi-Tenant Wholesaler Switcher */}
+        {isRefSwitcherOpen && (
+          <AdminRefSwitcherModal
+            isOpen={isRefSwitcherOpen}
+            onClose={closeRefSwitcher}
+          />
+        )}
 
-      {/* Admin Capital Investment Modal (When Cash Balance is Low or 0) */}
-      <AdminInvestModal
-        isOpen={isInvestModalOpen}
-        onClose={closeInvestModal}
-      />
+        {/* Admin Capital Investment Modal (When Cash Balance is Low or 0) */}
+        {isInvestModalOpen && (
+          <AdminInvestModal
+            isOpen={isInvestModalOpen}
+            onClose={closeInvestModal}
+          />
+        )}
 
-      {/* Admin Direct Supplier/Company Payment Modal */}
-      <AdminCompanyPaymentModal
-        isOpen={isCompanyPaymentModalOpen}
-        onClose={closeCompanyPaymentModal}
-      />
+        {/* Admin Direct Supplier/Company Payment Modal */}
+        {isCompanyPaymentModalOpen && (
+          <AdminCompanyPaymentModal
+            isOpen={isCompanyPaymentModalOpen}
+            onClose={closeCompanyPaymentModal}
+          />
+        )}
 
-      {/* DSR & Counter Pay Admin Modal */}
-      <PayAdminModal
-        isOpen={isPayAdminModalOpen}
-        onClose={closePayAdminModal}
-      />
+        {/* DSR & Counter Pay Admin Modal */}
+        {isPayAdminModalOpen && (
+          <PayAdminModal
+            isOpen={isPayAdminModalOpen}
+            onClose={closePayAdminModal}
+          />
+        )}
 
-      {/* Add New Supplier Modal */}
-      <AddSupplierModal
-        isOpen={isAddSupplierModalOpen}
-        onClose={closeAddSupplierModal}
-      />
+        {/* Add New Supplier Modal */}
+        {isAddSupplierModalOpen && (
+          <AddSupplierModal
+            isOpen={isAddSupplierModalOpen}
+            onClose={closeAddSupplierModal}
+          />
+        )}
 
-      {/* Edit Bank & Cash Balance Modal */}
-      <EditBalanceModal
-        isOpen={isBalanceModalOpen}
-        onClose={closeBalanceModal}
-        initialType={balanceModalType}
-      />
+        {/* Edit Bank & Cash Balance Modal */}
+        {isBalanceModalOpen && (
+          <EditBalanceModal
+            isOpen={isBalanceModalOpen}
+            onClose={closeBalanceModal}
+            initialType={balanceModalType}
+          />
+        )}
 
-      {/* Cash Counter Expense Modal (বেতন, দোকান ভাড়া, বিদ্যুৎ বিল, অন্যান্য) */}
-      <ExpenseModal
-        isOpen={isExpenseModalOpen}
-        onClose={closeExpenseModal}
-        defaultCategory={expenseModalDefaultCategory}
-      />
+        {/* Cash Counter Expense Modal (বেতন, দোকান ভাড়া, বিদ্যুৎ বিল, অন্যান্য) */}
+        {isExpenseModalOpen && (
+          <ExpenseModal
+            isOpen={isExpenseModalOpen}
+            onClose={closeExpenseModal}
+            defaultCategory={expenseModalDefaultCategory}
+          />
+        )}
 
-      {/* Staff & Team Management Modal (DSR & Cash Counter multi-device access) */}
-      <StaffManagementModal
-        isOpen={isStaffManagementOpen}
-        onClose={closeStaffManagement}
-      />
+        {/* Staff & Team Management Modal (DSR & Cash Counter multi-device access) */}
+        {isStaffManagementOpen && (
+          <StaffManagementModal
+            isOpen={isStaffManagementOpen}
+            onClose={closeStaffManagement}
+          />
+        )}
 
-      {/* Multi-Device Staff Data Sync Hub (DSR, Counter & Admin Cloud Sync) */}
-      <MultiDeviceStaffSyncModal />
+        {/* Multi-Device Staff Data Sync Hub (DSR, Counter & Admin Cloud Sync) */}
+        {isStaffSyncModalOpen && (
+          <MultiDeviceStaffSyncModal />
+        )}
 
-      {/* System Data Reset & Fresh Start Modal */}
-      <SystemResetModal
-        isOpen={isResetModalOpen}
-        onClose={closeResetModal}
-      />
+        {/* System Data Reset & Fresh Start Modal */}
+        {isResetModalOpen && (
+          <SystemResetModal
+            isOpen={isResetModalOpen}
+            onClose={closeResetModal}
+          />
+        )}
 
-      {/* Mobile App PWA Install Guide Modal */}
-      <InstallGuideModal
-        isOpen={isInstallModalOpen}
-        onClose={() => setIsInstallModalOpen(false)}
-        deferredPrompt={deferredPrompt}
-        onOpenUpdateModal={() => setIsUpdateModalOpen(true)}
-        isUpdateAvailable={isUpdateAvailable}
-      />
+        {/* Mobile App PWA Install Guide Modal */}
+        {isInstallModalOpen && (
+          <InstallGuideModal
+            isOpen={isInstallModalOpen}
+            onClose={() => setIsInstallModalOpen(false)}
+            deferredPrompt={deferredPrompt}
+            onOpenUpdateModal={() => setIsUpdateModalOpen(true)}
+            isUpdateAvailable={isUpdateAvailable}
+          />
+        )}
 
-      {/* Floating Live App Update Banner (Appears when new release is detected) */}
-      {isUpdateAvailable && !isBannerDismissed && (
-        <AppUpdateBanner
-          language={language}
-          serverVersion={serverVersion}
-          isUpdating={isApplyingUpdate}
-          updateStatusText={updateStatusText}
-          onOpenModal={() => setIsUpdateModalOpen(true)}
-          onApplyUpdate={triggerUpdate}
-          onDismiss={dismissBanner}
-        />
-      )}
+        {/* In-App Live Software Update Modal & Cache Purger */}
+        {isUpdateModalOpen && (
+          <AppUpdateModal
+            isOpen={isUpdateModalOpen}
+            onClose={() => setIsUpdateModalOpen(false)}
+            language={language}
+            currentVersion={currentVersion}
+            serverVersion={serverVersion}
+            isUpdateAvailable={isUpdateAvailable}
+            isChecking={isCheckingUpdate}
+            isUpdating={isApplyingUpdate}
+            updateStatusText={updateStatusText}
+            isStandalone={isStandalone}
+            onCheckUpdates={checkForUpdates}
+            onTriggerUpdate={triggerUpdate}
+          />
+        )}
 
-      {/* In-App Live Software Update Modal & Cache Purger */}
-      <AppUpdateModal
-        isOpen={isUpdateModalOpen}
-        onClose={() => setIsUpdateModalOpen(false)}
-        language={language}
-        currentVersion={currentVersion}
-        serverVersion={serverVersion}
-        isUpdateAvailable={isUpdateAvailable}
-        isChecking={isCheckingUpdate}
-        isUpdating={isApplyingUpdate}
-        updateStatusText={updateStatusText}
-        isStandalone={isStandalone}
-        onCheckUpdates={checkForUpdates}
-        onTriggerUpdate={triggerUpdate}
-      />
+        {/* Cloud Backup & Offline Synchronization Hub Modal */}
+        {isBackupModalOpen && (
+          <BackupSyncModal />
+        )}
 
-      {/* Cloud Backup & Offline Synchronization Hub Modal */}
-      <BackupSyncModal />
+        {/* Connected Devices Fleet & Pending Files Manager Modal */}
+        {isFleetModalOpen && (
+          <ConnectedDevicesFleetModal
+            isOpen={isFleetModalOpen}
+            onClose={closeFleetModal}
+          />
+        )}
 
-      {/* Connected Devices Fleet & Pending Files Manager Modal */}
-      <ConnectedDevicesFleetModal
-        isOpen={isFleetModalOpen}
-        onClose={closeFleetModal}
-      />
+        {/* Official Company Profile, Warehouse & Letterhead Settings Modal */}
+        {isBusinessProfileOpen && (
+          <BusinessProfileModal
+            isOpen={isBusinessProfileOpen}
+            onClose={closeBusinessProfile}
+          />
+        )}
 
-      {/* Official Company Profile, Warehouse & Letterhead Settings Modal */}
-      <BusinessProfileModal
-        isOpen={isBusinessProfileOpen}
-        onClose={closeBusinessProfile}
-      />
+        {/* All Statements & Accounts PDF Hub Modal */}
+        {isAllStatementsOpen && (
+          <AllStatementsModal
+            isOpen={isAllStatementsOpen}
+            onClose={() => setIsAllStatementsOpen(false)}
+            onPreviewPdf={(res) => setPdfPreviewResult(res)}
+            onOpenCashDrawerStatement={handleOpenCashDrawerStatement}
+          />
+        )}
 
-      {/* All Statements & Accounts PDF Hub Modal */}
-      <AllStatementsModal
-        isOpen={isAllStatementsOpen}
-        onClose={() => setIsAllStatementsOpen(false)}
-        onPreviewPdf={(res) => setPdfPreviewResult(res)}
-        onOpenCashDrawerStatement={handleOpenCashDrawerStatement}
-      />
+        {/* Interactive Cash Drawer Statement & Audit Modal */}
+        {isCashDrawerStatementOpen && (
+          <CashDrawerStatementModal
+            isOpen={isCashDrawerStatementOpen}
+            onClose={() => setIsCashDrawerStatementOpen(false)}
+            initialRole={cashDrawerStatementRole}
+            onOpenPdfPreview={(res) => setPdfPreviewResult(res)}
+          />
+        )}
 
-      {/* Interactive Cash Drawer Statement & Audit Modal */}
-      <CashDrawerStatementModal
-        isOpen={isCashDrawerStatementOpen}
-        onClose={() => setIsCashDrawerStatementOpen(false)}
-        initialRole={cashDrawerStatementRole}
-        onOpenPdfPreview={(res) => setPdfPreviewResult(res)}
-      />
-
-      {/* Universal PDF Document Interactive Preview & Download Modal */}
-      <PdfPreviewModal
-        pdfResult={pdfPreviewResult}
-        onClose={() => setPdfPreviewResult(null)}
-      />
+        {/* Universal PDF Document Interactive Preview & Download Modal */}
+        {pdfPreviewResult && (
+          <PdfPreviewModal
+            pdfResult={pdfPreviewResult}
+            onClose={() => setPdfPreviewResult(null)}
+          />
+        )}
+      </Suspense>
 
       {/* Biometric & PIN Security Lock Screen (App Open Protection) */}
       {isBiometricLocked && (

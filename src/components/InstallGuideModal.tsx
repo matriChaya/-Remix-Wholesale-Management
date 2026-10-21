@@ -118,6 +118,27 @@ export const InstallGuideModal: React.FC<InstallGuideModalProps> = ({
     document.body.removeChild(link);
   };
 
+  const handleDownloadOfflineERP = () => {
+    const link = document.createElement('a');
+    link.href = '/Matrichhaya-Offline-ERP.html';
+    link.download = 'Matrichhaya-Offline-ERP.html';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleCopyOfflineCode = async () => {
+    try {
+      const res = await fetch('/Matrichhaya-Offline-ERP.html');
+      const text = await res.text();
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      copyUrl();
+    }
+  };
+
   const handleDownloadMobileLauncher = () => {
     const link = document.createElement('a');
     link.href = '/Matrichhaya-Telecom-Mobile-Install.html';
@@ -601,53 +622,67 @@ export const InstallGuideModal: React.FC<InstallGuideModalProps> = ({
           {/* TAB 4: Offline Files & Data Backup */}
           {activeTab === 'offline_files' && (
             <div className="space-y-4">
-              <div className="p-4 rounded-2xl bg-purple-950/40 border border-purple-500/30 flex items-start gap-3 text-xs text-purple-200">
-                <Database className="w-5 h-5 text-purple-400 shrink-0 mt-0.5" />
-                <div className="leading-relaxed">
-                  <span className="font-bold text-purple-300 block mb-1">
-                    {isBn ? 'ইনস্টল ও ব্যাকআপ ফাইলসমূহ:' : 'Offline Launchers & Full Database Backup:'}
-                  </span>
-                  {isBn
-                    ? 'আপনি চাইলে একটি অফলাইন লঞ্চার ফাইল ডাউনলোড করে যেকোনো কম্পিউটার বা ফোনে রেখে দিতে পারেন, এবং যেকোনো সময় পুরো ডেটাবেজের সুরক্ষিত ব্যাকআপ ডাউনলোড করতে পারেন।'
-                    : 'Download a standalone launcher file or export a full JSON database snapshot for safe local retention.'}
+              {/* Standalone Offline ERP Hero Card */}
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-950 via-slate-900 to-indigo-950 border border-emerald-500/40 space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-10 h-10 rounded-2xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 flex items-center justify-center font-bold text-lg shrink-0">
+                      💻
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                        <span>{isBn ? 'কম্পিউটার ও মোবাইল স্ট্যান্ডঅ্যালোন অফলাইন অ্যাপ' : 'Standalone Offline ERP Application'}</span>
+                        <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full font-mono font-bold">
+                          100% Offline IndexedDB
+                        </span>
+                      </h4>
+                      <p className="text-xs text-slate-300 mt-0.5">
+                        {isBn
+                          ? 'ইন্টারনেট ছাড়াই কম্পিউটার বা মোবাইলে লোকাল স্টোরেজে সম্পূর্ণ হিসাব রাখা যাবে। অনলাইনে এলে স্বয়ংক্রিয়ভাবে গুগল ড্রাইভে ব্যাকআপ হবে।'
+                          : 'Operate 100% offline with local browser storage. Auto-syncs to Admin Google Drive whenever connected.'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                  <button
+                    onClick={handleDownloadOfflineERP}
+                    id="btn-download-standalone-offline-erp"
+                    className="py-2.5 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition shadow-lg shadow-emerald-950/50 active:scale-95 cursor-pointer"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>{isBn ? 'ডাউনলোড: অফলাইন অ্যাপ ফাইল (.html)' : 'Download Offline App File (.html)'}</span>
+                  </button>
+
+                  <button
+                    onClick={handleCopyOfflineCode}
+                    id="btn-copy-standalone-offline-code"
+                    className="py-2.5 px-3.5 rounded-xl bg-indigo-900/70 hover:bg-indigo-800 text-indigo-200 border border-indigo-500/40 font-bold text-xs flex items-center justify-center gap-2 transition active:scale-95 cursor-pointer"
+                  >
+                    {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                    <span>{copied ? (isBn ? 'কোড কপি হয়েছে!' : 'Code Copied!') : (isBn ? 'অ্যাপ্লিকেশন কোড কপি করুন' : 'Copy Application Code')}</span>
+                  </button>
+                </div>
+
+                <div className="p-2.5 bg-slate-950/80 rounded-xl border border-slate-800 text-[11px] text-slate-300 leading-relaxed">
+                  💡 <strong>{isBn ? 'কীভাবে ব্যবহার করবেন:' : 'How to Run:'}</strong> {isBn
+                    ? 'ফাইলটি ডাউনলোড করে বা কোড কপি করে একটি ফাইলে (Matrichhaya-Offline-ERP.html) সেভ করুন। এরপর কম্পিউটার বা মোবাইলে ডাবল-ক্লিক করলেই ব্রাউজারে অফলাইনে চালু হয়ে যাবে। কোনো ইন্টারনেটের প্রয়োজন নেই!'
+                    : 'Download the .html file or copy code, save it on your PC or phone, and double-click to launch in any browser offline!'}
                 </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {/* Mobile Launcher File */}
-                <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3 flex flex-col justify-between">
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-2 text-sm font-bold text-emerald-300">
-                      <Smartphone className="w-4 h-4 text-emerald-400" />
-                      <span>{isBn ? 'মোবাইল ইনস্টলার ফাইল' : 'Mobile Installer'}</span>
-                    </div>
-                    <p className="text-xs text-slate-400">
-                      {isBn
-                        ? 'একটি ছোট .html ফাইল যা ফোনে রেখে দিলে যেকোনো সময় এক ক্লিকে অ্যাপ চালু করা যায়।'
-                        : 'A lightweight mobile launcher HTML file to save on phone for 1-click launch.'}
-                    </p>
-                  </div>
-
-                  <button
-                    onClick={handleDownloadMobileLauncher}
-                    id="btn-download-mobile-launcher"
-                    className="w-full py-2.5 px-3 rounded-xl bg-emerald-900/60 hover:bg-emerald-800/80 text-emerald-200 border border-emerald-500/40 text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer"
-                  >
-                    <Download className="w-4 h-4" />
-                    <span>{isBn ? 'মোবাইল লঞ্চার ডাউনলোড' : 'Download Mobile (.html)'}</span>
-                  </button>
-                </div>
-
                 {/* Desktop Launcher File Download */}
                 <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3 flex flex-col justify-between">
                   <div className="space-y-1.5">
                     <div className="flex items-center gap-2 text-sm font-bold text-white">
                       <FileCode className="w-4 h-4 text-sky-400" />
-                      <span>{isBn ? 'ডেস্কটপ লঞ্চার ফাইল' : 'Desktop Launcher'}</span>
+                      <span>{isBn ? 'পিসি ডেস্কটপ লঞ্চার' : 'PC Desktop Launcher'}</span>
                     </div>
                     <p className="text-xs text-slate-400">
                       {isBn
-                        ? 'একটি ছোট .html ফাইল যা পিসির ডেস্কটপে সেভ করে ডাবল-ক্লিক করলেই সরাসরি সফটওয়্যার ওপেন হবে।'
+                        ? 'কম্পিউটারের ডেস্কটপে রেখে দিলে এক ক্লিকে সরাসরি সফটওয়্যারে নিয়ে যাবে।'
                         : 'A lightweight launcher file to save on desktop for quick 1-click execution.'}
                     </p>
                   </div>
@@ -658,7 +693,31 @@ export const InstallGuideModal: React.FC<InstallGuideModalProps> = ({
                     className="w-full py-2.5 px-3 rounded-xl bg-sky-900/60 hover:bg-sky-800/80 text-sky-200 border border-sky-500/40 text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer"
                   >
                     <Download className="w-4 h-4" />
-                    <span>{isBn ? 'ডেস্কটপ লঞ্চার ডাউনলোড' : 'Download Desktop (.html)'}</span>
+                    <span>{isBn ? 'ডেস্কটপ লঞ্চার ডাউনলোড' : 'Download Desktop Launcher'}</span>
+                  </button>
+                </div>
+
+                {/* Mobile Launcher File */}
+                <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-3 flex flex-col justify-between">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center gap-2 text-sm font-bold text-emerald-300">
+                      <Smartphone className="w-4 h-4 text-emerald-400" />
+                      <span>{isBn ? 'মোবাইল ইনস্টলার ফাইল' : 'Mobile Installer'}</span>
+                    </div>
+                    <p className="text-xs text-slate-400">
+                      {isBn
+                        ? 'স্মার্টফোনে সেভ করে রাখলে হোমস্ক্রিন থেকে সরাসরি অ্যাপ ওপেন হয়।'
+                        : 'A lightweight mobile launcher HTML file to save on phone for 1-click launch.'}
+                    </p>
+                  </div>
+
+                  <button
+                    onClick={handleDownloadMobileLauncher}
+                    id="btn-download-mobile-launcher"
+                    className="w-full py-2.5 px-3 rounded-xl bg-emerald-900/60 hover:bg-emerald-800/80 text-emerald-200 border border-emerald-500/40 text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>{isBn ? 'মোবাইল লঞ্চার ডাউনলোড' : 'Download Mobile Launcher'}</span>
                   </button>
                 </div>
 
@@ -667,11 +726,11 @@ export const InstallGuideModal: React.FC<InstallGuideModalProps> = ({
                   <div className="space-y-1.5">
                     <div className="flex items-center gap-2 text-sm font-bold text-white">
                       <HardDrive className="w-4 h-4 text-emerald-400" />
-                      <span>{isBn ? 'সম্পূর্ণ ডেটাবেজ ব্যাকআপ (Full DB Backup)' : 'Full DB Backup'}</span>
+                      <span>{isBn ? 'সম্পূর্ণ ডেটাবেজ ব্যাকআপ (Full DB Backup JSON)' : 'Full DB Backup'}</span>
                     </div>
                     <p className="text-xs text-slate-400">
                       {isBn
-                        ? 'সকল মেমো, স্টক, বাকি খাতা, ভাউচার ও ক্যাশের সম্পূর্ণ ব্যাকআপ ফাইল (JSON) ডাউনলোড করুন।'
+                        ? 'সকল চালান, স্টক, বাকি খাতা, ভাউচার ও ক্যাশের সম্পূর্ণ ব্যাকআপ ফাইল (JSON) সংরক্ষণ করুন।'
                         : 'Download a complete offline JSON snapshot of all invoices, stock, ledger, and cash balance.'}
                     </p>
                   </div>

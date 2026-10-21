@@ -278,19 +278,21 @@ export const ConnectedDevicesFleetModal: React.FC<ConnectedDevicesFleetModalProp
           </div>
         </div>
 
-        {/* 3-Tier Hybrid Storage & Google Drive Resilience Strip */}
-        <div className="mx-5 mt-4 p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+        {/* Direct Google Drive Storage & Pending File Sync Strip */}
+        <div className="mx-5 mt-4 p-3.5 rounded-xl bg-slate-950/80 border border-indigo-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-md">
           <div className="space-y-0.5">
             <div className="flex items-center gap-1.5 font-bold text-white">
-              <span>⚡১. ডিভাইস মেমরি ➔ ☁️২. গুগল ড্রাইভ ➔ 🌐৩. ক্লাউড একাউন্ট</span>
+              <span className="text-emerald-400">⚡১. ডিভাইস লোকাল মেমরি</span>
+              <span className="text-slate-500">➔</span>
+              <span className="text-sky-400">☁️২. সরাসরি এডমিন গুগল ড্রাইভ (১৫ GB)</span>
               <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-mono">
-                v4.0.0
+                ড্রাইভ সিঙ্ক সক্রিয়
               </span>
             </div>
-            <p className="text-[11px] text-slate-400">
+            <p className="text-[11px] text-slate-300">
               {isBn
-                ? 'ক্লাউড একাউন্টে পর্যাপ্ত জায়গা না থাকলেও গুগল ড্রাইভের কারণে অ্যাপটি রানিং থাকবে এবং পেন্ডিং ফাইলগুলো গুগল ড্রাইভে আপলোড হবে।'
-                : 'Even if cloud storage is limited, Google Drive keeps the app 100% running and pending files safely buffer to Drive.'}
+                ? 'পেন্ডিং ফাইলগুলো কোনো ক্লাউড একাউন্টে নয়, সরাসরি এডমিনের গুগল ড্রাইভে (argsm38@gmail.com) সাইন ও সংরক্ষিত হবে।'
+                : 'Pending files are signed and uploaded directly to Admin Google Drive, NOT to any external cloud account.'}
             </p>
           </div>
 
@@ -298,23 +300,12 @@ export const ConnectedDevicesFleetModal: React.FC<ConnectedDevicesFleetModalProp
             <button
               type="button"
               onClick={handleBufferAllToDrive}
-              disabled={isProcessing || !isGoogleDriveConnected}
-              className="px-3 py-1.5 rounded-xl bg-sky-700 hover:bg-sky-600 text-white font-bold text-xs flex items-center gap-1.5 transition active:scale-95 disabled:opacity-50 cursor-pointer shadow-sm"
-              title="সকল পেন্ডিং ফাইল গুগল ড্রাইভে বাফার করুন"
+              disabled={isProcessing}
+              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 transition active:scale-95 disabled:opacity-50 cursor-pointer shadow-md shadow-indigo-950/50"
+              title="সকল পেন্ডিং ফাইল সরাসরি এডমিন গুগল ড্রাইভে সাইন ও আপলোড করুন"
             >
-              <UploadCloud className="w-3.5 h-3.5" />
-              <span>{isBn ? 'ড্রাইভে পেন্ডিং বাফার' : 'Buffer to Drive'}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handlePushAllToCloud}
-              disabled={isProcessing || !isGoogleDriveConnected}
-              className="px-3 py-1.5 rounded-xl bg-purple-700 hover:bg-purple-600 text-white font-bold text-xs flex items-center gap-1.5 transition active:scale-95 disabled:opacity-50 cursor-pointer shadow-sm"
-              title="গুগল ড্রাইভ থেকে ক্লাউডে পুশ ও হিস্ট্রি সিঙ্ক"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>{isBn ? 'ড্রাইভ ➔ ক্লাউড সিঙ্ক' : 'Push to Cloud'}</span>
+              <UploadCloud className="w-4 h-4" />
+              <span>{isBn ? '⚡ পেন্ডিং ফাইল ড্রাইভে সাইন করুন' : 'Sign Pending to Drive'}</span>
             </button>
           </div>
         </div>
@@ -443,11 +434,11 @@ export const ConnectedDevicesFleetModal: React.FC<ConnectedDevicesFleetModalProp
                             type="button"
                             onClick={() => handleUploadPending(dev.deviceId, dev.name)}
                             disabled={isProcessing}
-                            className="px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 transition active:scale-95 cursor-pointer shadow-sm"
-                            title={isBn ? 'পেন্ডিং ফাইলগুলো ক্লাউডে আপলোড ও সিঙ্ক করুন' : 'Force Upload to Cloud'}
+                            className="px-2.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1 transition active:scale-95 cursor-pointer shadow-sm"
+                            title={isBn ? 'পেন্ডিং ফাইলগুলো সরাসরি এডমিন গুগল ড্রাইভে আপলোড ও সাইন করুন' : 'Sign and Upload to Google Drive'}
                           >
                             <UploadCloud className="w-3.5 h-3.5" />
-                            <span>{isBn ? 'আপলোড' : 'Upload'}</span>
+                            <span>{isBn ? 'ড্রাইভে সাইন' : 'Sign to Drive'}</span>
                           </button>
 
                           <button

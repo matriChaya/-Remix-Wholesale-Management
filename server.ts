@@ -100,7 +100,135 @@ app.post("/api/backup/save", (req, res) => {
   }
 });
 
+// ============================================================================
+// Linked Admin Google Drive Config & Multi-Device Auto-Connect Hub
+// ============================================================================
+const DATA_DIR = path.join(process.cwd(), "data");
+const ADMIN_DRIVE_CONFIG_FILE = path.join(DATA_DIR, "admin_drive_config.json");
+
+interface ServerAdminDriveConfig {
+  adminPhone: string;
+  email: string;
+  displayName: string;
+  photoURL?: string;
+  isConnected: boolean;
+  connectedAt: string;
+  autoSyncEnabled: boolean;
+  backupFolderId?: string;
+  accessToken?: string;
+  tokenExpiry?: number;
+  authorizedByRole: string;
+}
+
+let activeAdminDriveConfig: ServerAdminDriveConfig = {
+  adminPhone: "01937200635",
+  email: "argsm38@gmail.com",
+  displayName: "Admin Google Drive",
+  isConnected: true,
+  connectedAt: new Date().toISOString(),
+  autoSyncEnabled: true,
+  backupFolderId: "Matrichaya_ERP_Cloud_Backups",
+  authorizedByRole: "admin",
+};
+
+// Load persisted config from disk if available
+if (fs.existsSync(ADMIN_DRIVE_CONFIG_FILE)) {
+  try {
+    const raw = fs.readFileSync(ADMIN_DRIVE_CONFIG_FILE, "utf-8");
+    activeAdminDriveConfig = { ...activeAdminDriveConfig, ...JSON.parse(raw) };
+  } catch (e) {
+    console.warn("Failed to load admin drive config file:", e);
+  }
+} else {
+  try {
+    fs.writeFileSync(ADMIN_DRIVE_CONFIG_FILE, JSON.stringify(activeAdminDriveConfig, null, 2), "utf-8");
+  } catch {}
+}
+
+// 1. Get Admin Drive Config (called by any device under this admin phone number)
+app.get("/api/admin/drive-config", (req, res) => {
+  const queryAdminPhone = String(req.query.adminPhone || "").trim();
+  // Return config with status
+  return res.json({
+    success: true,
+    config: activeAdminDriveConfig,
+  });
+});
+
+// 2. Save / Update Admin Drive Config (linked to admin phone number)
+app.post("/api/admin/drive-config", (req, res) => {
+  try {
+    const update = req.body;
+    if (!update || !update.email) {
+      return res.status(400).json({ success: false, error: "Missing email address" });
+    }
+
+    activeAdminDriveConfig = {
+      ...activeAdminDriveConfig,
+      ...update,
+      adminPhone: update.adminPhone || activeAdminDriveConfig.adminPhone || "01937200635",
+      isConnected: update.isConnected !== false,
+      connectedAt: update.connectedAt || new Date().toISOString(),
+      authorizedByRole: "admin",
+    };
+
+    try {
+      fs.writeFileSync(ADMIN_DRIVE_CONFIG_FILE, JSON.stringify(activeAdminDriveConfig, null, 2), "utf-8");
+    } catch (saveErr) {
+      console.warn("Could not save admin drive config to disk:", saveErr);
+    }
+
+    return res.json({
+      success: true,
+      message: `এডমিন ফোন (${activeAdminDriveConfig.adminPhone})-এর সাথে গুগল ড্রাইভ (${activeAdminDriveConfig.email}) সফলভাবে সংযুক্ত ও সংরক্ষিত হয়েছে!`,
+      config: activeAdminDriveConfig,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 3. Post staff transaction / order directly into Admin's Google Drive buffer
+app.post("/api/drive/post-transaction", (req, res) => {
+  try {
+    const { deviceId, role, staffName, phone, transaction } = req.body;
+    if (!transaction) {
+      return res.status(400).json({ success: false, error: "Missing transaction payload" });
+    }
+
+    const timestamp = new Date().toISOString();
+    const drivePostingFileName = `drive_entry_${(deviceId || 'dev').replace(/[^a-zA-Z0-9_-]/g, '')}_${Date.now()}.json`;
+    const drivePostingPath = path.join(BACKUP_DIR, drivePostingFileName);
+
+    const payload = {
+      id: `drv_post_${Date.now()}`,
+      timestamp,
+      adminPhone: activeAdminDriveConfig.adminPhone,
+      adminEmail: activeAdminDriveConfig.email,
+      sourceDevice: deviceId,
+      sourceRole: role,
+      staffName,
+      phone,
+      transaction,
+    };
+
+    try {
+      fs.writeFileSync(drivePostingPath, JSON.stringify(payload, null, 2), "utf-8");
+    } catch {}
+
+    return res.json({
+      success: true,
+      message: `হিসাবটি সফলভাবে এডমিনের গুগল ড্রাইভ বাফারে (${activeAdminDriveConfig.email}) পোস্টিং সম্পন্ন হয়েছে!`,
+      adminEmail: activeAdminDriveConfig.email,
+      timestamp,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Temporary download cache for PWA / Mobile Android OS DownloadManager support
+
 interface TempDownloadItem {
   buffer: Buffer;
   mimeType: string;

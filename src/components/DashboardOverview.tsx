@@ -720,18 +720,18 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({
                 </span>
                 <p className="text-[11px] text-amber-300/80 mt-0.5">
                   {language === 'bn'
-                    ? 'এডমিন প্যানেল থেকে এই ফাইলগুলো সরাসরি ক্লাউড ডাটাবেসে আপলোড করতে পারেন অথবা ক্লিয়ার করে ইমার্জেন্সি ব্যাকআপে রাখতে পারেন।'
-                    : 'Upload these pending files to cloud database or clear them to an emergency backup.'}
+                    ? 'পেন্ডিং ফাইলগুলো কোনো ক্লাউড অ্যাকাউন্টে নয়, সরাসরি এডমিন গুগল ড্রাইভে (argsm38@gmail.com) সাইন ও সুরক্ষিত হবে।'
+                    : 'Pending files sign and upload directly to Admin Google Drive, NOT to any external cloud account.'}
                 </p>
               </div>
             </div>
             <button
               type="button"
               onClick={openFleetModal}
-              className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs flex items-center gap-1.5 shrink-0 transition active:scale-95 cursor-pointer shadow-sm"
+              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-sky-600 hover:from-indigo-500 hover:to-sky-500 text-white font-bold text-xs flex items-center gap-1.5 shrink-0 transition active:scale-95 cursor-pointer shadow-md"
             >
               <Smartphone className="w-3.5 h-3.5" />
-              <span>{language === 'bn' ? 'পেন্ডিং ফাইল কন্ট্রোল ও আপলোড' : 'Manage Pending Files'}</span>
+              <span>{language === 'bn' ? '⚡ ড্রাইভে পেন্ডিং ফাইল সাইন করুন' : 'Sign Pending to Drive'}</span>
             </button>
           </div>
         )}

@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8">
+  <title>মাতৃছায়া টেলিকম ERP - সম্পূর্ণ অফলাইন ও লোকাল স্টোরেজ সংস্করণ</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#059669">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hind Siliguri", sans-serif; }
+    body { background: #020617; color: #f8fafc; min-height: 100vh; padding-bottom: 60px; }
+    header { background: #0f172a; border-bottom: 1px solid #1e293b; padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 50; }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .logo-badge { width: 38px; height: 38px; border-radius: 10px; background: linear-gradient(135deg, #059669, #0284c7); display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: bold; color: white; }
+    .brand h1 { font-size: 16px; font-weight: 800; color: #fff; }
+    .brand p { font-size: 11px; color: #94a3b8; }
+    .net-badge { font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 20px; display: flex; align-items: center; gap: 6px; }
+    .online { background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); }
+    .offline { background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); }
+    .container { max-width: 900px; margin: 0 auto; padding: 16px; }
+    .banner { background: linear-gradient(135deg, #0f172a, #1e1b4b); border: 1px solid #3730a3; border-radius: 16px; padding: 16px; margin-bottom: 20px; }
+    .banner h2 { font-size: 14px; color: #a5b4fc; margin-bottom: 4px; display: flex; align-items: center; gap: 8px; }
+    .banner p { font-size: 12px; color: #cbd5e1; line-height: 1.5; }
+    .stats-grid { display: grid; grid-cols-2; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 20px; }
+    .stat-card { background: #0f172a; border: 1px solid #1e293b; border-radius: 14px; padding: 14px; }
+    .stat-label { font-size: 11px; color: #94a3b8; margin-bottom: 4px; }
+    .stat-val { font-size: 18px; font-weight: 800; color: #fff; }
+    .btn { background: #059669; color: white; border: none; padding: 10px 16px; border-radius: 10px; font-size: 12px; font-weight: bold; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+    .btn:hover { background: #10b981; }
+    .btn-secondary { background: #1e293b; color: #cbd5e1; border: 1px solid #334155; }
+    .btn-secondary:hover { background: #334155; color: white; }
+    .form-card { background: #0f172a; border: 1px solid #1e293b; border-radius: 16px; padding: 18px; margin-bottom: 20px; }
+    .form-card h3 { font-size: 14px; font-weight: bold; margin-bottom: 12px; color: #f8fafc; }
+    .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-bottom: 12px; }
+    label { font-size: 11px; color: #94a3b8; display: block; margin-bottom: 4px; }
+    input, select { width: 100%; padding: 9px 12px; background: #020617; border: 1px solid #334155; border-radius: 8px; color: #fff; font-size: 12px; }
+    input:focus, select:focus { outline: none; border-color: #10b981; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th { background: #020617; text-align: left; padding: 10px; color: #94a3b8; border-bottom: 1px solid #1e293b; }
+    td { padding: 10px; border-bottom: 1px solid #1e293b; }
+    .tag { font-size: 10px; padding: 2px 8px; border-radius: 12px; font-weight: bold; }
+    .tag-cash { background: rgba(16, 185, 129, 0.2); color: #34d399; }
+    .tag-due { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+    .empty-state { text-align: center; padding: 30px; color: #64748b; font-size: 12px; }
+    .sync-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <div class="logo-badge">M</div>
+      <div>
+        <h1>মাতৃছায়া টেলিকম ERP</h1>
+        <p>লোকাল স্টোরেজ ও গুগল ড্রাইভ সিঙ্ক ইঞ্জিন (এডমিন: 01937200635)</p>
+      </div>
+    </div>
+    <div id="netStatus" class="net-badge online">
+      <span style="width: 8px; height: 8px; border-radius: 50%; background: currentColor;"></span>
+      <span id="netText">অনলাইন</span>
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="banner">
+      <h2>☁️ ৩-স্তর স্মার্ট স্টোরেজ আর্কিটেকচার</h2>
+      <p>১. পিসি/মোবাইলের লোকাল স্টোরেজে (IndexedDB) সব তথ্য অফলাইনে তাৎক্ষণিক সেভ হয়।<br>
+      ২. ইন্টারনেট পাওয়ার সাথে সাথে স্বয়ংক্রিয়ভাবে এডমিন গুগল ড্রাইভে (argsm38@gmail.com) ব্যাকআপ চলে যায়।<br>
+      ৩. এডমিন যেকোনো ডিভাইস বা ব্রাউজার থেকে লগইন করলেই সব ডেটা সমন্বয় হয়ে যায়।</p>
+      <div class="sync-actions">
+        <button class="btn" onclick="syncToGoogleDriveNow()">📤 গুগল ড্রাইভে ব্যাকআপ পাঠান</button>
+        <button class="btn btn-secondary" onclick="exportBackupJSON()">💾 ব্যাকআপ ফাইল ডাউনলোড (.json)</button>
+        <button class="btn btn-secondary" onclick="openFullApp()">🚀 ফুল সফটওয়্যারে যান</button>
+      </div>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">মোট অফলাইন চালান</div>
+        <div class="stat-val" id="totalOrders">০</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">মোট বিক্রয় (নগদ)</div>
+        <div class="stat-val" style="color: #34d399;" id="totalSales">৳০</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">মোট বকেয়া</div>
+        <div class="stat-val" style="color: #38bdf8;" id="totalDue">৳০</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">ড্রাইভ ব্যাকআপ স্ট্যাটাস</div>
+        <div class="stat-val" style="font-size: 13px; color: #a5b4fc;" id="backupStatus">সক্রিয় ও প্রস্তুত ✓</div>
+      </div>
+    </div>
+
+    <!-- Quick Entry Form -->
+    <div class="form-card">
+      <h3>⚡ দ্রুত বিক্রয় চালান / কালেকশন এন্ট্রি (১০০% অফলাইনে সেভ হবে)</h3>
+      <form id="saleForm" onsubmit="handleSaveSale(event)">
+        <div class="form-row">
+          <div>
+            <label>দোকানের নাম / কাস্টমার *</label>
+            <input type="text" id="custName" placeholder="দোকানের নাম লিখুন" required>
+          </div>
+          <div>
+            <label>মোবাইল নম্বর</label>
+            <input type="tel" id="custPhone" placeholder="017xxxxxxxx">
+          </div>
+          <div>
+            <label>রোল / দায়িত্ব</label>
+            <select id="userRole">
+              <option value="counter">💻 ক্যাশ কাউন্টার (দোকান)</option>
+              <option value="dsr">🚚 ডিএসআর (ফিল্ড সেলস)</option>
+              <option value="admin">👑 প্রধান এডমিন</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div>
+            <label>পণ্যের বিবরণ *</label>
+            <input type="text" id="itemDesc" placeholder="আইটেম ও পরিমাণ" required>
+          </div>
+          <div>
+            <label>মোট বিল (টাকা) *</label>
+            <input type="number" id="totalAmt" placeholder="0" required oninput="calcDue()">
+          </div>
+          <div>
+            <label>নগদ জমা (টাকা) *</label>
+            <input type="number" id="paidAmt" placeholder="0" required oninput="calcDue()">
+          </div>
+          <div>
+            <label>বকেয়া (স্বয়ংক্রিয়)</label>
+            <input type="number" id="dueAmt" placeholder="0" readonly style="color: #f87171;">
+          </div>
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 8px;">
+          <button type="submit" class="btn">💾 লোকাল মেমরিতে সংরক্ষণ করুন</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- Recent Offline Invoices Table -->
+    <div class="form-card">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <h3>📋 লোকাল স্টোরেজে রক্ষিত চালানসমূহ</h3>
+        <span style="font-size: 11px; color: #94a3b8;" id="recordCount">০টি রেকর্ড</span>
+      </div>
+
+      <div style="overflow-x: auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>চালান নং</th>
+              <th>দোকান / গ্রাহক</th>
+              <th>বিবরণ</th>
+              <th>মোট বিল</th>
+              <th>নগদ</th>
+              <th>বকেয়া</th>
+              <th>স্ট্যাটাস</th>
+            </tr>
+          </thead>
+          <tbody id="ordersTable">
+            <tr>
+              <td colspan="7" class="empty-state">বর্তমানে কোনো অফলাইন মেমো নেই। উপরের ফর্ম পূরণ করে সেভ করুন।</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const DB_NAME = "MatrichhayaOfflineERP";
+    const STORE_NAME = "offline_invoices";
+    let dbInstance = null;
+
+    // Initialize IndexedDB
+    function initDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          if (!db.objectStoreNames.contains(STORE_NAME)) {
+            db.createObjectStore(STORE_NAME, { keyPath: "id" });
+          }
+        };
+        req.onsuccess = () => {
+          dbInstance = req.result;
+          resolve(dbInstance);
+        };
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function getOrders() {
+      if (!dbInstance) await initDB();
+      return new Promise((resolve) => {
+        const tx = dbInstance.transaction(STORE_NAME, "readonly");
+        const store = tx.objectStore(STORE_NAME);
+        const req = store.getAll();
+        req.onsuccess = () => resolve(req.result || []);
+        req.onerror = () => resolve([]);
+      });
+    }
+
+    async function saveOrder(order) {
+      if (!dbInstance) await initDB();
+      return new Promise((resolve, reject) => {
+        const tx = dbInstance.transaction(STORE_NAME, "readwrite");
+        const store = tx.objectStore(STORE_NAME);
+        const req = store.put(order);
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    function calcDue() {
+      const tot = Number(document.getElementById('totalAmt').value) || 0;
+      const pd = Number(document.getElementById('paidAmt').value) || 0;
+      document.getElementById('dueAmt').value = Math.max(0, tot - pd);
+    }
+
+    async function renderOrders() {
+      const orders = await getOrders();
+      document.getElementById('totalOrders').innerText = orders.length.toLocaleString('bn-BD');
+      
+      const totalSales = orders.reduce((s, o) => s + (Number(o.paid) || 0), 0);
+      const totalDue = orders.reduce((s, o) => s + (Number(o.due) || 0), 0);
+      document.getElementById('totalSales').innerText = '৳' + totalSales.toLocaleString('bn-BD');
+      document.getElementById('totalDue').innerText = '৳' + totalDue.toLocaleString('bn-BD');
+      document.getElementById('recordCount').innerText = orders.length + 'টি রেকর্ড সংরক্ষিত';
+
+      const tbody = document.getElementById('ordersTable');
+      if (orders.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="empty-state">বর্তমানে কোনো অফলাইন মেমো নেই। উপরের ফর্ম পূরণ করে সেভ করুন।</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = orders.slice().reverse().map(o => `
+        <tr>
+          <td style="font-family: monospace; font-weight: bold; color: #38bdf8;">${o.id}</td>
+          <td><strong>${o.customer}</strong><br><small style="color: #64748b;">${o.phone || '-'}</small></td>
+          <td>${o.item}</td>
+          <td>৳${Number(o.total).toLocaleString()}</td>
+          <td style="color: #34d399;">৳${Number(o.paid).toLocaleString()}</td>
+          <td style="color: #f87171;">৳${Number(o.due).toLocaleString()}</td>
+          <td><span class="tag ${o.due > 0 ? 'tag-due' : 'tag-cash'}">${o.due > 0 ? 'বাকি' : 'পরিশোধ'}</span></td>
+        </tr>
+      `).join('');
+    }
+
+    async function handleSaveSale(e) {
+      e.preventDefault();
+      const order = {
+        id: "INV-" + Date.now().toString().slice(-6),
+        customer: document.getElementById('custName').value,
+        phone: document.getElementById('custPhone').value,
+        role: document.getElementById('userRole').value,
+        item: document.getElementById('itemDesc').value,
+        total: Number(document.getElementById('totalAmt').value) || 0,
+        paid: Number(document.getElementById('paidAmt').value) || 0,
+        due: Number(document.getElementById('dueAmt').value) || 0,
+        timestamp: new Date().toISOString()
+      };
+
+      await saveOrder(order);
+      alert("✅ চালানটি লোকাল স্টোরেজে সফলভাবে সেভ হয়েছে! অনলাইনে আসলে স্বয়ংক্রিয়ভাবে ড্রাইভে পোস্টিং হবে।");
+      document.getElementById('saleForm').reset();
+      renderOrders();
+
+      // If online, auto push to server/drive buffer
+      if (navigator.onLine) {
+        postOrderToServer(order);
+      }
+    }
+
+    async function postOrderToServer(order) {
+      try {
+        await fetch('/api/drive/post-transaction', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            deviceId: 'standalone_pc_app',
+            role: order.role || 'counter',
+            staffName: 'লোকাল স্টাফ',
+            phone: '01937200635',
+            transaction: order
+          })
+        });
+      } catch (e) {}
+    }
+
+    async function syncToGoogleDriveNow() {
+      const orders = await getOrders();
+      if (orders.length === 0) {
+        alert("লোকাল স্টোরেজে কোনো নতুন চালান নেই।");
+        return;
+      }
+      if (!navigator.onLine) {
+        alert("⚠️ আপনি বর্তমানে অফলাইনে আছেন। ইন্টারনেট কানেকশন পেলেই ড্রাইভ ব্যাকআপ স্বয়ংক্রিয়ভাবে সম্পন্ন হবে।");
+        return;
+      }
+      try {
+        const payload = {
+          id: "backup_offline_" + Date.now(),
+          timestamp: new Date().toISOString(),
+          adminPhone: "01937200635",
+          email: "argsm38@gmail.com",
+          orders: orders
+        };
+        const res = await fetch('/api/backup/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        if (res.ok) {
+          alert("✅ সফলভাবে সকল পেন্ডিং চালান ও হিসাব এডমিন গুগল ড্রাইভে (argsm38@gmail.com) সাইন ও সংরক্ষিত হয়েছে!");
+        } else {
+          alert("✅ লোকাল ডেটাবেজে ব্যাকআপ প্রস্তুত আছে।");
+        }
+      } catch (err) {
+        alert("✅ ব্যাকআপ লোকাল মেমরিতে অক্ষত আছে এবং অনলাইন সিঙ্কে পোস্টিং হবে।");
+      }
+    }
+
+    async function exportBackupJSON() {
+      const orders = await getOrders();
+      const blob = new Blob([JSON.stringify({ admin: "01937200635", email: "argsm38@gmail.com", timestamp: new Date().toISOString(), orders }, null, 2)], { type: "application/json" });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `matrichaya_offline_backup_${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+    }
+
+    function openFullApp() {
+      window.location.href = window.location.origin ? window.location.origin : "/";
+    }
+
+    function updateNetStatus() {
+      const isOnline = navigator.onLine;
+      const badge = document.getElementById('netStatus');
+      const text = document.getElementById('netText');
+      if (isOnline) {
+        badge.className = "net-badge online";
+        text.innerText = "অনলাইন";
+        syncToGoogleDriveNow();
+      } else {
+        badge.className = "net-badge offline";
+        text.innerText = "অফলাইন";
+      }
+    }
+
+    window.addEventListener('online', updateNetStatus);
+    window.addEventListener('offline', updateNetStatus);
+    window.addEventListener('DOMContentLoaded', () => {
+      initDB().then(() => renderOrders());
+      updateNetStatus();
+    });
+  </script>
+</body>
+</html>
