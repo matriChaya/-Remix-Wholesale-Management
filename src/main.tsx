@@ -1,3 +1,7 @@
+import { installGlobalStorageQuotaShield } from './utils/indexedDbStorage';
+// Guarantee zero uncaught QuotaExceededError crashes across the entire app
+installGlobalStorageQuotaShield();
+
 import {StrictMode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';

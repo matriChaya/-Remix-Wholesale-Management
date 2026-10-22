@@ -59,6 +59,7 @@ export const BackupSyncModal: React.FC = () => {
     isSyncingToCloud,
     isBackupModalOpen,
     closeBackupModal,
+    openSupabaseModal,
     syncPendingOfflineData,
     backupAllPendingFilesTogether,
     triggerManualBackup,
@@ -612,6 +613,39 @@ export const BackupSyncModal: React.FC = () => {
 
         {/* Modal Body */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-5">
+          {/* Supabase Free Migration Recommendation Card */}
+          <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-950/70 via-slate-900 to-teal-950/70 border border-emerald-500/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
+            <div className="flex items-start gap-3">
+              <div className="p-2.5 rounded-xl bg-emerald-500/20 text-emerald-400 shrink-0">
+                <Database className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="text-xs sm:text-sm font-bold text-white flex items-center gap-1.5">
+                  <span>{language === 'bn' ? 'সুপাবেজে (Supabase) ডেটা মাইগ্রেশন করুন' : 'Migrate to Supabase Cloud'}</span>
+                  <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-emerald-500/20 text-emerald-300 font-bold">
+                    {language === 'bn' ? 'আজীবন ফ্রি' : 'Free Tier'}
+                  </span>
+                </h4>
+                <p className="text-[11px] text-slate-300 mt-0.5">
+                  {language === 'bn'
+                    ? 'গুগল ড্রাইভ ও ফায়ারবেস লিমিট শেষ? কোনো ডুয়েল কারেন্সি কার্ড ছাড়াই সুপাবেজের ফ্রি PostgreSQL এ সমস্ত বিক্রয় ও বাকি ডেটা সেভ করুন।'
+                    : 'Out of storage quota? Migrate seamlessly to Supabase PostgreSQL free tier.'}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                closeBackupModal();
+                openSupabaseModal('sync');
+              }}
+              className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition shrink-0 flex items-center gap-1.5 shadow-md cursor-pointer"
+            >
+              <Database className="w-3.5 h-3.5" />
+              <span>{language === 'bn' ? 'সুপাবেজ ওপেন করুন' : 'Open Supabase'}</span>
+            </button>
+          </div>
+
           {/* Status Message Banner */}
           {syncStatusMsg && (
             <div

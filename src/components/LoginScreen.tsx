@@ -20,7 +20,8 @@ import {
   UserPlus,
   X,
   Sparkles,
-  ArrowRight
+  ArrowRight,
+  Mail,
 } from 'lucide-react';
 import { sanitizePhoneNumber } from '../utils/contactPickerHelper';
 
@@ -286,6 +287,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       setErrorMsg(t.nameRequired);
       return;
     }
+    if (!email.trim() || !email.includes('@')) {
+      setErrorMsg(
+        language === 'bn'
+          ? 'প্রথমবার রেজিস্ট্রেশনের জন্য একটি সঠিক জিমেইল আইডি (Gmail ID) দিন।'
+          : 'Please enter a valid Gmail / Email ID for account registration.'
+      );
+      return;
+    }
 
     setIsLoading(true);
     try {
@@ -509,8 +518,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                 <span className="w-2 h-2 rounded-full bg-sky-400"></span>
                 <span>
                   {language === 'bn'
-                    ? '২. মোবাইল নম্বর ও পাসওয়ার্ড দিন:'
-                    : '2. Enter Mobile Phone & Password:'}
+                    ? '২. মোবাইল নম্বর ও পিন দিয়ে দ্রুত প্রবেশ (জিমেইল ছাড়াই):'
+                    : '2. Login with Mobile Phone & PIN (No Gmail needed):'}
                 </span>
               </div>
 
@@ -699,6 +708,32 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                 required
                 className="w-full px-3 py-2 bg-slate-950 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
               />
+            </div>
+
+            {/* Gmail / Email Field for First Time Registration */}
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-300 mb-1 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <Mail className="w-3.5 h-3.5 text-rose-400" />
+                  <span>{language === 'bn' ? 'জিমেইল আইডি (Gmail ID) *' : 'Gmail / Email ID *'}</span>
+                </span>
+                <span className="text-[10px] text-emerald-400 font-mono">
+                  {language === 'bn' ? 'প্রথমবার আবশ্যক' : 'Required once'}
+                </span>
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="argsm38@gmail.com"
+                required
+                className="w-full px-3 py-2 bg-slate-950 border border-slate-700 hover:border-slate-600 focus:border-emerald-500 rounded-xl text-xs font-mono text-white placeholder-slate-500 focus:outline-none"
+              />
+              <p className="text-[10px] text-slate-400 mt-1 leading-normal">
+                {language === 'bn'
+                  ? '💡 প্রথমবার জিমেইল দিয়ে সাইন-আপ করার পর প্রোফাইলে জিমেইলটি দেখা যাবে। পরবর্তীতে জিমেইল ছাড়াই কেবল মোবাইল নম্বর ও পিন দিয়ে দ্রুত লগইন করা যাবে।'
+                  : '💡 Register with Gmail once. Afterwards, log in anytime with just Mobile Number & PIN.'}
+              </p>
             </div>
 
             {selectedRole === 'retailer' && (

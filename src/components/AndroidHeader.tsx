@@ -88,6 +88,7 @@ export const AndroidHeader: React.FC<AndroidHeaderProps> = ({
     openStaffSyncModal,
     openBackupModal,
     openFleetModal,
+    openSupabaseModal,
     remotePendingDevices,
     isAppRunningViaDrive,
     hasCloudQuotaNotice,
@@ -594,6 +595,18 @@ export const AndroidHeader: React.FC<AndroidHeaderProps> = ({
             <span className="hidden sm:inline font-bold">{language === 'bn' ? 'ড্রাইভ ব্যাকআপ' : 'Drive Backup'}</span>
           </button>
 
+          {/* Supabase PostgreSQL & Realtime Hub Trigger */}
+          <button
+            onClick={() => openSupabaseModal('connect')}
+            id="btn-header-supabase-trigger"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-500/50 text-xs font-semibold transition-all active:scale-95 shadow-sm cursor-pointer"
+            title={language === 'bn' ? 'সুপাবেজ (Supabase) ক্লাউড ডাটাবেজ ও রিয়েল-টাইম হাব' : 'Supabase Cloud Database & Realtime Hub'}
+          >
+            <Database className="w-3.5 h-3.5 text-emerald-400" />
+            <span className="hidden sm:inline font-bold">{language === 'bn' ? 'সুপাবেজ ক্লাউড' : 'Supabase'}</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          </button>
+
           {/* Connected Devices Fleet & Pending Files Trigger for Admin */}
           {currentRole === 'admin' && (
             <button
@@ -725,19 +738,36 @@ export const AndroidHeader: React.FC<AndroidHeaderProps> = ({
           title="Click to view or switch Wholesaler Admin Reference"
         >
           <div className="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></div>
-          <div className="truncate text-slate-300">
+          <div className="truncate text-slate-300 flex items-center gap-2 flex-wrap">
             {currentRole === 'admin' ? (
-              <span>
-                <strong className="text-amber-400">{language === 'bn' ? 'মালিক কোড' : 'Owner Code'}:</strong>{' '}
-                <span className="font-mono text-white font-bold">{currentUser.phone}</span>{' '}
-                <span className="text-slate-400 hidden sm:inline">({currentUser.enterpriseName || currentUser.shopName || activeAdminEnterprise})</span>
-              </span>
+              <>
+                <span>
+                  <strong className="text-amber-400">{language === 'bn' ? 'মালিক কোড' : 'Owner Code'}:</strong>{' '}
+                  <span className="font-mono text-white font-bold">{currentUser.phone}</span>{' '}
+                  <span className="text-slate-400 hidden sm:inline">({currentUser.enterpriseName || currentUser.shopName || activeAdminEnterprise})</span>
+                </span>
+                {currentUser.email && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-900 border border-slate-700 text-slate-300 text-[10px] font-mono">
+                    <span className="text-rose-400">📧</span>
+                    <span>{currentUser.email}</span>
+                    <span className="text-emerald-400 font-bold" title="Verified Gmail">✓</span>
+                  </span>
+                )}
+              </>
             ) : (
-              <span>
-                <strong className="text-emerald-400">{language === 'bn' ? 'যুক্ত পাইকারি প্রতিষ্ঠান' : 'Wholesaler'}:</strong>{' '}
-                <span className="text-white font-bold">{activeAdminEnterprise}</span>{' '}
-                <span className="text-slate-400 font-mono hidden xs:inline">({activeAdminPhone})</span>
-              </span>
+              <>
+                <span>
+                  <strong className="text-emerald-400">{language === 'bn' ? 'যুক্ত পাইকারি প্রতিষ্ঠান' : 'Wholesaler'}:</strong>{' '}
+                  <span className="text-white font-bold">{activeAdminEnterprise}</span>{' '}
+                  <span className="text-slate-400 font-mono hidden xs:inline">({activeAdminPhone})</span>
+                </span>
+                {currentUser.email && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-900 border border-slate-700 text-slate-300 text-[10px] font-mono">
+                    <span className="text-rose-400">📧</span>
+                    <span>{currentUser.email}</span>
+                  </span>
+                )}
+              </>
             )}
           </div>
         </button>

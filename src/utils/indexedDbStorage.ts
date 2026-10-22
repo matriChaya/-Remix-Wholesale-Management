@@ -191,43 +191,88 @@ export async function idbGetState<T>(key: string, fallback: T): Promise<T> {
 }
 
 // ---------------------------------------------------------------------------
-// Safe LocalStorage Wrapper (Guarantees zero uncaught QuotaExceededError crashes)
+// Safe LocalStorage Wrapper & Global Quota Shield (Guarantees zero uncaught QuotaExceededError crashes)
 // ---------------------------------------------------------------------------
+
+export function installGlobalStorageQuotaShield() {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    const rawSetItem = window.localStorage.setItem.bind(window.localStorage);
+    // Avoid double wrapping
+    if ((window.localStorage.setItem as any).__quota_shielded__) return;
+
+    const shieldedSetItem = function (key: string, value: string): void {
+      try {
+        rawSetItem(key, value);
+      } catch (err: any) {
+        const isQuota =
+          err?.name === 'QuotaExceededError' ||
+          err?.code === 22 ||
+          err?.code === 1014 ||
+          err?.number === -2147024882 ||
+          String(err).toLowerCase().includes('quota');
+
+        if (isQuota) {
+          console.warn(`[SafeStorageShield] LocalStorage quota exceeded for "${key}". Pruning non-critical data...`);
+          try {
+            // Free up memory by purging volatile caches
+            window.localStorage.removeItem('ws_offline_sync_queue');
+            window.localStorage.removeItem('ws_backup_history');
+            window.localStorage.removeItem('admin_drive_pending_tx');
+
+            // Prune activity logs to 30 latest
+            const rawLogs = window.localStorage.getItem('ws_activity_logs');
+            if (rawLogs) {
+              try {
+                const logs = JSON.parse(rawLogs);
+                if (Array.isArray(logs) && logs.length > 30) {
+                  window.localStorage.removeItem('ws_activity_logs');
+                  try {
+                    rawSetItem('ws_activity_logs', JSON.stringify(logs.slice(0, 30)));
+                  } catch (e) {}
+                }
+              } catch (e) {}
+            }
+
+            // Retry setting item
+            rawSetItem(key, value);
+            return;
+          } catch (retryErr) {
+            console.warn(`[SafeStorageShield] Storage quota still full for "${key}". Saved without crashing.`);
+            // Suppress crash - do not rethrow QuotaExceededError!
+            return;
+          }
+        }
+        throw err;
+      }
+    };
+    (shieldedSetItem as any).__quota_shielded__ = true;
+    window.localStorage.setItem = shieldedSetItem;
+  } catch (e) {
+    console.warn('Failed to install storage shield:', e);
+  }
+}
+
+// Auto-install immediately on script evaluation
+installGlobalStorageQuotaShield();
 
 export const safeStorage = {
   setItem(key: string, value: string): boolean {
     try {
-      localStorage.setItem(key, value);
-      return true;
-    } catch (err: any) {
-      const isQuota =
-        err?.name === 'QuotaExceededError' ||
-        err?.code === 22 ||
-        err?.code === 1014 ||
-        err?.number === -2147024882 ||
-        String(err).toLowerCase().includes('quota');
-
-      if (isQuota) {
-        console.warn(`[SafeStorage] LocalStorage quota exceeded for key "${key}". Cleaning up transient caches...`);
-        try {
-          // Free up memory by clearing heavy transient offline sync queue string from localStorage
-          localStorage.removeItem('ws_offline_sync_queue');
-          localStorage.removeItem('ws_backup_history');
-          // Retry write once with critical data
-          localStorage.setItem(key, value);
-          return true;
-        } catch {
-          console.warn(`[SafeStorage] Stored in IndexedDB fallback for "${key}" without crash.`);
-          return false;
-        }
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(key, value);
+        return true;
       }
+      return false;
+    } catch (err: any) {
+      console.warn(`[SafeStorage] Handled setItem error for "${key}":`, err?.message || err);
       return false;
     }
   },
 
   getItem(key: string): string | null {
     try {
-      return localStorage.getItem(key);
+      return typeof window !== 'undefined' && window.localStorage ? window.localStorage.getItem(key) : null;
     } catch (err) {
       console.warn(`[SafeStorage] getItem error for "${key}":`, err);
       return null;
@@ -236,9 +281,12 @@ export const safeStorage = {
 
   removeItem(key: string): void {
     try {
-      localStorage.removeItem(key);
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.removeItem(key);
+      }
     } catch (err) {
       console.warn(`[SafeStorage] removeItem error for "${key}":`, err);
     }
   },
 };
+

@@ -45,6 +45,7 @@ const MemoKhataScannerModal = lazy(() => import('./components/MemoKhataScannerMo
 const AppUpdateModal = lazy(() => import('./components/AppUpdateModal').then(m => ({ default: m.AppUpdateModal })));
 const CashDrawerStatementModal = lazy(() => import('./components/CashDrawerStatementModal').then(m => ({ default: m.CashDrawerStatementModal })));
 const ExpenseModal = lazy(() => import('./components/ExpenseModal').then(m => ({ default: m.ExpenseModal })));
+const SupabaseSyncModal = lazy(() => import('./components/SupabaseSyncModal').then(m => ({ default: m.SupabaseSyncModal })));
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -117,6 +118,9 @@ function MainAppContent() {
     closeFleetModal,
     isBackupModalOpen,
     isStaffSyncModalOpen,
+    isSupabaseModalOpen,
+    supabaseModalInitialTab,
+    closeSupabaseModal,
   } = useWholesale();
 
   const t = translations[language];
@@ -639,6 +643,17 @@ function MainAppContent() {
             isOpen={isFleetModalOpen}
             onClose={closeFleetModal}
           />
+        )}
+
+        {/* Supabase PostgreSQL & Realtime Multi-Device Hub Modal */}
+        {isSupabaseModalOpen && (
+          <Suspense fallback={null}>
+            <SupabaseSyncModal
+              isOpen={isSupabaseModalOpen}
+              onClose={closeSupabaseModal}
+              initialTab={supabaseModalInitialTab}
+            />
+          </Suspense>
         )}
 
         {/* Official Company Profile, Warehouse & Letterhead Settings Modal */}

@@ -19,6 +19,7 @@ import {
   ChevronUp,
   Download,
   Info,
+  Database,
 } from 'lucide-react';
 import { formatCurrency } from '../utils/translations';
 
@@ -41,6 +42,7 @@ export const ConnectedDevicesFleetModal: React.FC<ConnectedDevicesFleetModalProp
     pushDriveToCloudAccount,
     isGoogleDriveConnected,
     hasCloudQuotaNotice,
+    openSupabaseModal,
   } = useWholesale();
 
   const [expandedDeviceId, setExpandedDeviceId] = useState<string | null>(null);
@@ -244,6 +246,39 @@ export const ConnectedDevicesFleetModal: React.FC<ConnectedDevicesFleetModalProp
             )}
           </div>
         )}
+
+        {/* Supabase Realtime Presence & Storage Integration Card */}
+        <div className="mx-5 mt-4 p-3.5 rounded-xl bg-gradient-to-r from-emerald-950/70 via-slate-900 to-teal-950/70 border border-emerald-500/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-md">
+          <div className="flex items-start gap-2.5">
+            <div className="p-2 rounded-lg bg-emerald-500/20 text-emerald-400 shrink-0">
+              <Database className="w-4 h-4" />
+            </div>
+            <div>
+              <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                <span>{isBn ? 'সুপাবেজ রিয়েল-টাইম ডিভাইস প্রেজেন্স ও ফাইল স্টোরেজ' : 'Supabase Realtime Presence & Storage'}</span>
+                <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-emerald-500/20 text-emerald-300 font-bold">
+                  {isBn ? 'WebSocket Presence' : 'Live WS'}
+                </span>
+              </h4>
+              <p className="text-[11px] text-slate-300 mt-0.5">
+                {isBn
+                  ? 'কোনো কর্মী ব্রাউজার বা অ্যাপ বন্ধ করলেই স্বয়ংক্রিয়ভাবে অফলাইন দেখাবে। পেন্ডিং ফাইলগুলো সুপাবেজে আপলোড করতে পারেন।'
+                  : 'Instant Online / Offline tracking via Supabase Realtime channels.'}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              openSupabaseModal('presence');
+            }}
+            className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition shrink-0 flex items-center gap-1.5 shadow-md cursor-pointer"
+          >
+            <Database className="w-3.5 h-3.5" />
+            <span>{isBn ? 'লাইভ চ্যানেল দেখুন' : 'View Live Presence'}</span>
+          </button>
+        </div>
 
         {/* Summary Stats */}
         <div className="grid grid-cols-3 gap-3 px-5 pt-4">

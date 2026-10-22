@@ -91,6 +91,9 @@ import {
   idbGetState,
   safeStorage
 } from '../utils/indexedDbStorage';
+import { initSupabasePresence } from '../services/supabasePresenceService';
+import { syncAllToSupabase, fetchFromSupabase, pushEntityToSupabase } from '../services/supabaseSyncService';
+import { isSupabaseConfigured } from '../services/supabaseClient';
 
 interface WholesaleContextType {
   language: Language;
@@ -657,6 +660,14 @@ interface WholesaleContextType {
   setIsFleetModalOpen: (open: boolean) => void;
   openFleetModal: () => void;
   closeFleetModal: () => void;
+
+  // Supabase PostgreSQL & Realtime Multi-Device Hub
+  isSupabaseModalOpen: boolean;
+  supabaseModalInitialTab: 'connect' | 'sync' | 'presence' | 'storage';
+  openSupabaseModal: (tab?: 'connect' | 'sync' | 'presence' | 'storage') => void;
+  closeSupabaseModal: () => void;
+  syncToSupabaseNow: () => Promise<{ success: boolean; message: string; count?: number }>;
+  restoreFromSupabaseNow: () => Promise<{ success: boolean; message: string }>;
 }
 
 export const DELETED_USERS_STORAGE_KEY = 'ws_deleted_user_ids';
@@ -1465,26 +1476,29 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   });
 
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>(() => {
-    const saved = localStorage.getItem('ws_activity_logs');
-    let parsed: ActivityLog[] = [];
-    if (saved) {
-      try {
-        parsed = JSON.parse(saved);
-      } catch (e) {}
-    }
-    const cleanParsed = (parsed || []).filter(
-      (log) => log && log.id && !['act_01', 'act_02', 'act_03', 'act_04'].includes(log.id)
-    );
-    const actMap = new Map<string, ActivityLog>();
-    (initialActivityLogs || []).forEach((a) => {
-      if (a && a.id) actMap.set(a.id, a);
-    });
-    cleanParsed.forEach((a) => {
-      if (a && a.id) actMap.set(a.id, a);
-    });
-    const finalLogs = Array.from(actMap.values());
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('ws_activity_logs', JSON.stringify(finalLogs));
+    let finalLogs: ActivityLog[] = [];
+    try {
+      const saved = safeStorage.getItem('ws_activity_logs');
+      let parsed: ActivityLog[] = [];
+      if (saved) {
+        try {
+          parsed = JSON.parse(saved);
+        } catch (e) {}
+      }
+      const cleanParsed = (parsed || []).filter(
+        (log) => log && log.id && !['act_01', 'act_02', 'act_03', 'act_04'].includes(log.id)
+      );
+      const actMap = new Map<string, ActivityLog>();
+      (initialActivityLogs || []).forEach((a) => {
+        if (a && a.id) actMap.set(a.id, a);
+      });
+      cleanParsed.forEach((a) => {
+        if (a && a.id) actMap.set(a.id, a);
+      });
+      finalLogs = Array.from(actMap.values()).slice(0, 100);
+      safeStorage.setItem('ws_activity_logs', JSON.stringify(finalLogs));
+    } catch (e) {
+      finalLogs = (initialActivityLogs || []).slice(0, 100);
     }
     return finalLogs;
   });
@@ -1538,7 +1552,10 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('ws_activity_logs', JSON.stringify(activityLogs));
+    try {
+      const trimmed = (activityLogs || []).slice(0, 100);
+      safeStorage.setItem('ws_activity_logs', JSON.stringify(trimmed));
+    } catch (e) {}
   }, [activityLogs]);
 
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>(() => {
@@ -1727,6 +1744,105 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const [isFleetModalOpen, setIsFleetModalOpen] = useState<boolean>(false);
   const openFleetModal = () => setIsFleetModalOpen(true);
   const closeFleetModal = () => setIsFleetModalOpen(false);
+
+  // Supabase PostgreSQL & Realtime Multi-Device Hub
+  const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState<boolean>(false);
+  const [supabaseModalInitialTab, setSupabaseModalInitialTab] = useState<'connect' | 'sync' | 'presence' | 'storage'>('connect');
+  const openSupabaseModal = (tab: 'connect' | 'sync' | 'presence' | 'storage' = 'connect') => {
+    setSupabaseModalInitialTab(tab);
+    setIsSupabaseModalOpen(true);
+  };
+  const closeSupabaseModal = () => setIsSupabaseModalOpen(false);
+
+  // Auto-initialize live presence when user connects or switches
+  useEffect(() => {
+    if (currentUser) {
+      try {
+        initSupabasePresence(currentUser);
+      } catch (e) {
+        console.debug('Supabase presence init note:', e);
+      }
+    }
+  }, [currentUser]);
+
+  const syncToSupabaseNow = async (): Promise<{ success: boolean; message: string; count?: number }> => {
+    try {
+      const bundle = {
+        users,
+        products,
+        orders,
+        retailers,
+        suppliers,
+        supplierLedger,
+        cashTransfers,
+        capitalTransactions,
+        bankAccounts,
+        replacements,
+        expenses,
+        companyReturns,
+        activityLogs,
+      };
+      return await syncAllToSupabase(
+        bundle,
+        currentUser?.adminPhone || currentUser?.phone || '01937200635',
+        currentUser?.name || 'Admin'
+      );
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Supabase sync failed' };
+    }
+  };
+
+  const restoreFromSupabaseNow = async (): Promise<{ success: boolean; message: string }> => {
+    try {
+      const res = await fetchFromSupabase(currentUser?.adminPhone || currentUser?.phone || '01937200635');
+      if (res.success && res.data) {
+        const snap: CloudBackupSnapshot = {
+          id: `sb_restore_${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          version: '4.0.0',
+          createdBy: currentUser?.name || 'Admin',
+          counts: {
+            products: res.data.products?.length || 0,
+            orders: res.data.orders?.length || 0,
+            retailers: res.data.retailers?.length || 0,
+            suppliers: res.data.suppliers?.length || 0,
+            transfers: res.data.cashTransfers?.length || 0,
+            supplierLedger: res.data.supplierLedger?.length || 0,
+            capitalTransactions: res.data.capitalTransactions?.length || 0,
+            replacements: res.data.replacements?.length || 0,
+            users: res.data.users?.length || 0,
+          },
+          financials: {
+            totalReceivables: 0,
+            totalPayables: 0,
+            totalStockValue: 0,
+            adminCash: 0,
+            counterCash: 0,
+            dsrcash: 0,
+            bankCash: 0,
+          },
+          data: {
+            products: res.data.products || products,
+            orders: res.data.orders || orders,
+            retailers: res.data.retailers || retailers,
+            suppliers: res.data.suppliers || suppliers,
+            supplierLedger: res.data.supplierLedger || supplierLedger,
+            cashTransfers: res.data.cashTransfers || cashTransfers,
+            capitalTransactions: res.data.capitalTransactions || capitalTransactions,
+            replacements: res.data.replacements || replacements,
+            companyReturns: res.data.companyReturns || companyReturns,
+            expenses: res.data.expenses || expenses,
+            users: res.data.users || users,
+            activityLogs: res.data.activityLogs || activityLogs,
+          },
+        };
+        await restoreFromBackupSnapshot(snap);
+      }
+      return { success: res.success, message: res.message };
+    } catch (err: any) {
+      return { success: false, message: err.message || 'Supabase restore failed' };
+    }
+  };
 
   const isInitialSeedDone = useRef<boolean>(false);
   const lastLocalSyncPingRef = useRef<number>(0);
@@ -2673,8 +2789,9 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         localStorage.setItem('ws_users', JSON.stringify(cleanSnapUsers));
       }
       if (snapLogs && snapLogs.length > 0) {
-        setActivityLogs(snapLogs);
-        localStorage.setItem('ws_activity_logs', JSON.stringify(snapLogs));
+        const trimmed = snapLogs.slice(0, 100);
+        setActivityLogs(trimmed);
+        safeStorage.setItem('ws_activity_logs', JSON.stringify(trimmed));
       }
 
       if (navigator.onLine && !isSimulatedOffline) {
@@ -9740,6 +9857,14 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setIsFleetModalOpen,
         openFleetModal,
         closeFleetModal,
+
+        // Supabase PostgreSQL & Realtime Multi-Device Hub
+        isSupabaseModalOpen,
+        supabaseModalInitialTab,
+        openSupabaseModal,
+        closeSupabaseModal,
+        syncToSupabaseNow,
+        restoreFromSupabaseNow,
 
         // Biometric Authentication & Secure Storage Bridge
         isBiometricLocked,

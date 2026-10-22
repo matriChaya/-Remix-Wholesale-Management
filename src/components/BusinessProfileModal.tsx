@@ -117,6 +117,35 @@ export const BusinessProfileModal: React.FC<BusinessProfileModalProps> = ({
             </div>
           )}
 
+          {/* User Account & Verified Gmail Profile Card */}
+          <div className="p-3.5 bg-gradient-to-r from-slate-950 to-emerald-950/40 rounded-xl border border-emerald-500/30 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-slate-900 border border-slate-700 flex items-center justify-center text-emerald-400 font-black text-sm">
+                {currentUser?.name?.slice(0, 2) || 'মা'}
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-white">{currentUser?.name || 'মাতৃছায়া টেলিকম'}</span>
+                  <span className="px-2 py-0.2 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 capitalize">
+                    {currentUser?.role || 'Admin'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2.5 mt-0.5 text-xs text-slate-300 flex-wrap">
+                  <span className="font-mono text-emerald-400 font-semibold">{currentUser?.phone || '01937200635'}</span>
+                  {currentUser?.email && (
+                    <span className="inline-flex items-center gap-1 text-[11px] text-slate-300 font-mono">
+                      <span>📧 {currentUser.email}</span>
+                      <span className="text-emerald-400 font-bold" title="Verified Gmail">✓</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+            <span className="text-[10px] text-emerald-400 font-medium px-2 py-1 rounded-lg bg-emerald-950/60 border border-emerald-500/30 hidden sm:inline">
+              {language === 'bn' ? 'ভেরিফাইড একাউন্ট' : 'Verified Profile'}
+            </span>
+          </div>
+
           {/* Business Core Info */}
           <div className="space-y-3 bg-slate-950/60 p-4 rounded-xl border border-slate-800">
             <h3 className="text-xs font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-2">

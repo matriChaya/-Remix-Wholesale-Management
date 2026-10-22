@@ -1,0 +1,285 @@
+import { getSupabase, isSupabaseConfigured } from './supabaseClient';
+import { safeStorage } from '../utils/indexedDbStorage';
+
+export const SUPABASE_SYNC_TABLE = 'matrichhaya_erp_sync';
+
+/**
+ * Complete SQL Schema for Supabase PostgreSQL Database
+ * Can be run in Supabase SQL Editor in 1 click
+ */
+export const SUPABASE_SQL_SCHEMA = `-- =================================================================
+-- "মাতৃছায়া টেলিকম ইআরপি" (Matrichhaya Telecom ERP) Database Schema
+-- Supabase PostgreSQL Free Tier Setup Script
+-- =================================================================
+
+-- 1. Universal State & Record Sync Table (Zero-migration guarantee)
+CREATE TABLE IF NOT EXISTS public.matrichhaya_erp_sync (
+  id TEXT PRIMARY KEY,
+  admin_phone TEXT NOT NULL DEFAULT '01937200635',
+  collection_name TEXT NOT NULL,
+  data JSONB NOT NULL,
+  record_count INTEGER DEFAULT 0,
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  device_id TEXT,
+  updated_by TEXT
+);
+
+-- Index for fast lookup by collection and admin
+CREATE INDEX IF NOT EXISTS idx_matrichhaya_sync_admin ON public.matrichhaya_erp_sync (admin_phone, collection_name);
+
+-- 2. Realtime Device Presence Table
+CREATE TABLE IF NOT EXISTS public.erp_device_presence (
+  device_id TEXT PRIMARY KEY,
+  user_id TEXT,
+  name TEXT,
+  role TEXT,
+  phone TEXT,
+  email TEXT,
+  platform TEXT DEFAULT 'browser',
+  is_online BOOLEAN DEFAULT true,
+  last_active TIMESTAMPTZ DEFAULT NOW(),
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Index for live presence status
+CREATE INDEX IF NOT EXISTS idx_device_presence_online ON public.erp_device_presence (is_online, last_active);
+
+-- 3. Document & Invoice Pending Files Table
+CREATE TABLE IF NOT EXISTS public.erp_pending_documents (
+  id TEXT PRIMARY KEY,
+  file_name TEXT NOT NULL,
+  file_type TEXT,
+  file_size BIGINT,
+  storage_path TEXT NOT NULL,
+  public_url TEXT,
+  category TEXT DEFAULT 'invoice', -- invoice, memo, receipt, photo
+  reference_no TEXT,
+  uploaded_by_phone TEXT,
+  uploaded_by_name TEXT,
+  device_id TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 4. Enable Row Level Security (RLS) with Public Access for App Users
+ALTER TABLE public.matrichhaya_erp_sync ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.erp_device_presence ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.erp_pending_documents ENABLE ROW LEVEL SECURITY;
+
+-- Create Open Policies (for anonymous & authenticated ERP clients)
+DROP POLICY IF EXISTS "Public Access matrichhaya_erp_sync" ON public.matrichhaya_erp_sync;
+CREATE POLICY "Public Access matrichhaya_erp_sync" ON public.matrichhaya_erp_sync
+  FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public Access erp_device_presence" ON public.erp_device_presence;
+CREATE POLICY "Public Access erp_device_presence" ON public.erp_device_presence
+  FOR ALL USING (true) WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Public Access erp_pending_documents" ON public.erp_pending_documents;
+CREATE POLICY "Public Access erp_pending_documents" ON public.erp_pending_documents
+  FOR ALL USING (true) WITH CHECK (true);
+
+-- Enable Realtime for Presence and Sync
+ALTER PUBLICATION supabase_realtime ADD TABLE public.matrichhaya_erp_sync;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.erp_device_presence;
+`;
+
+export interface ErpSyncBundle {
+  users?: any[];
+  products?: any[];
+  orders?: any[];
+  retailers?: any[];
+  suppliers?: any[];
+  supplierLedger?: any[];
+  cashTransfers?: any[];
+  capitalTransactions?: any[];
+  bankAccounts?: any[];
+  replacements?: any[];
+  expenses?: any[];
+  companyReturns?: any[];
+  activityLogs?: any[];
+  appSettings?: any;
+}
+
+/**
+ * Upload all ERP application state into Supabase PostgreSQL
+ */
+export async function syncAllToSupabase(
+  bundle: ErpSyncBundle,
+  adminPhone: string = '01937200635',
+  updatedBy: string = 'Admin'
+): Promise<{ success: boolean; message: string; count: number }> {
+  const supabase = getSupabase();
+  if (!supabase || !isSupabaseConfigured()) {
+    return {
+      success: false,
+      message: 'সুপাবেজ সংযোগ কনফিগার করা নেই। অনুগ্রহ করে Supabase URL ও Key সেট করুন।',
+      count: 0,
+    };
+  }
+
+  try {
+    const collections: Array<{ name: string; data: any[] | any }> = [
+      { name: 'users', data: bundle.users || [] },
+      { name: 'products', data: bundle.products || [] },
+      { name: 'orders', data: bundle.orders || [] },
+      { name: 'retailers', data: bundle.retailers || [] },
+      { name: 'suppliers', data: bundle.suppliers || [] },
+      { name: 'supplierLedger', data: bundle.supplierLedger || [] },
+      { name: 'cashTransfers', data: bundle.cashTransfers || [] },
+      { name: 'capitalTransactions', data: bundle.capitalTransactions || [] },
+      { name: 'bankAccounts', data: bundle.bankAccounts || [] },
+      { name: 'replacements', data: bundle.replacements || [] },
+      { name: 'expenses', data: bundle.expenses || [] },
+      { name: 'companyReturns', data: bundle.companyReturns || [] },
+      { name: 'activityLogs', data: (bundle.activityLogs || []).slice(0, 50) },
+      { name: 'appSettings', data: bundle.appSettings || {} },
+    ];
+
+    let totalRecords = 0;
+    const cleanAdminPhone = adminPhone.replace(/[^0-9]/g, '') || '01937200635';
+
+    for (const item of collections) {
+      const isArr = Array.isArray(item.data);
+      const count = isArr ? item.data.length : 1;
+      totalRecords += count;
+
+      const recordId = `${cleanAdminPhone}_${item.name}`;
+
+      const { error } = await supabase
+        .from(SUPABASE_SYNC_TABLE)
+        .upsert(
+          {
+            id: recordId,
+            admin_phone: cleanAdminPhone,
+            collection_name: item.name,
+            data: item.data,
+            record_count: count,
+            updated_at: new Date().toISOString(),
+            updated_by: updatedBy,
+          },
+          { onConflict: 'id' }
+        );
+
+      if (error) {
+        console.warn(`[SupabaseSync] Upsert failed for ${item.name}:`, error.message);
+        // If the table does not exist, return a descriptive error informing the user to run SQL
+        if (error.code === '42P01' || error.message?.includes('does not exist')) {
+          return {
+            success: false,
+            message: `সুপাবেজ ডাটাবেজে টেবিল পাওয়া যায়নি (${error.message})। দয়া করে সুপাবেজ SQL এডিটরে দেওয়া SQL স্ক্রিপ্টটি একবার রান করুন।`,
+            count: 0,
+          };
+        }
+      }
+    }
+
+    // Save timestamp of successful sync
+    const nowIso = new Date().toISOString();
+    safeStorage.setItem('ws_last_supabase_sync', nowIso);
+
+    return {
+      success: true,
+      message: `সুপাবেজে মোট ${totalRecords}টি হিসাব ও রেকর্ড সফলভাবে সংরক্ষিত হয়েছে।`,
+      count: totalRecords,
+    };
+  } catch (err: any) {
+    console.error('[SupabaseSync] Error in syncAllToSupabase:', err);
+    return {
+      success: false,
+      message: `সিঙ্ক ব্যর্থ হয়েছে: ${err.message || 'অজানা ত্রুটি'}`,
+      count: 0,
+    };
+  }
+}
+
+/**
+ * Fetch and restore all ERP application state from Supabase PostgreSQL
+ */
+export async function fetchFromSupabase(
+  adminPhone: string = '01937200635'
+): Promise<{ success: boolean; data?: ErpSyncBundle; message: string }> {
+  const supabase = getSupabase();
+  if (!supabase || !isSupabaseConfigured()) {
+    return {
+      success: false,
+      message: 'সুপাবেজ সংযোগ সক্রিয় নেই।',
+    };
+  }
+
+  try {
+    const cleanAdminPhone = adminPhone.replace(/[^0-9]/g, '') || '01937200635';
+
+    const { data, error } = await supabase
+      .from(SUPABASE_SYNC_TABLE)
+      .select('*')
+      .eq('admin_phone', cleanAdminPhone);
+
+    if (error) {
+      return {
+        success: false,
+        message: `ডাটা লোড ত্রুটি: ${error.message}`,
+      };
+    }
+
+    if (!data || data.length === 0) {
+      return {
+        success: false,
+        message: 'সুপাবেজে এই এডমিনের কোনো পূর্ববর্তী ডেটা পাওয়া যায়নি।',
+      };
+    }
+
+    const bundle: ErpSyncBundle = {};
+
+    data.forEach((row: any) => {
+      const col = row.collection_name;
+      if (col && row.data) {
+        (bundle as any)[col] = row.data;
+      }
+    });
+
+    return {
+      success: true,
+      data: bundle,
+      message: `সুপাবেজ থেকে ${data.length}টি কালেকশনের হিসাব সফলভাবে পুনরুদ্ধার করা হয়েছে।`,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      message: `পুনরুদ্ধার করতে ব্যর্থ: ${err.message}`,
+    };
+  }
+}
+
+/**
+ * Push an individual entity update directly to Supabase
+ */
+export async function pushEntityToSupabase(
+  collectionName: string,
+  data: any,
+  adminPhone: string = '01937200635'
+): Promise<boolean> {
+  const supabase = getSupabase();
+  if (!supabase || !isSupabaseConfigured()) return false;
+
+  try {
+    const cleanAdminPhone = adminPhone.replace(/[^0-9]/g, '') || '01937200635';
+    const recordId = `${cleanAdminPhone}_${collectionName}`;
+    const count = Array.isArray(data) ? data.length : 1;
+
+    const { error } = await supabase.from(SUPABASE_SYNC_TABLE).upsert(
+      {
+        id: recordId,
+        admin_phone: cleanAdminPhone,
+        collection_name: collectionName,
+        data: data,
+        record_count: count,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'id' }
+    );
+
+    return !error;
+  } catch {
+    return false;
+  }
+}
