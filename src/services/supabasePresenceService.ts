@@ -14,11 +14,23 @@ export interface LiveDevicePresence {
   lastSeen: string;
 }
 
+export interface RealtimeDataChangeEvent {
+  collection: string;
+  data: any;
+  sourceDeviceId: string;
+  action?: string;
+  updatedBy?: string;
+  timestamp: string;
+}
+
+export type RealtimeDataChangeListener = (event: RealtimeDataChangeEvent) => void;
+
 type PresenceListener = (devices: LiveDevicePresence[]) => void;
 
 let activeChannel: any = null;
 let currentDeviceId: string = '';
 const listeners = new Set<PresenceListener>();
+const dataChangeListeners = new Set<RealtimeDataChangeListener>();
 
 /**
  * Generate or get a persistent device identifier
@@ -124,6 +136,44 @@ export function initSupabasePresence(currentUser: UserProfile): void {
     .on('presence', { event: 'leave' }, ({ leftPresences }: any) => {
       notifyListeners();
     })
+    // 1. Cross-device Realtime Broadcast for Instant Multi-Device State Synchronization
+    .on('broadcast', { event: 'erp_realtime_change' }, ({ payload }: any) => {
+      if (payload && payload.sourceDeviceId !== deviceId) {
+        console.log('[SupabaseRealtime] Multi-device live broadcast received for:', payload.collection);
+        dataChangeListeners.forEach((fn) => {
+          try {
+            fn(payload);
+          } catch (e) {
+            console.error('[SupabaseRealtime] Listener error:', e);
+          }
+        });
+      }
+    })
+    // 2. PostgreSQL CDC table change listener for persistent sync
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'matrichhaya_erp_sync' },
+      (payload: any) => {
+        const row = payload.new;
+        if (row && row.collection_name && row.device_id !== deviceId) {
+          console.log('[SupabaseRealtime] PostgreSQL table change detected for:', row.collection_name);
+          dataChangeListeners.forEach((fn) => {
+            try {
+              fn({
+                collection: row.collection_name,
+                data: row.data,
+                sourceDeviceId: row.device_id || 'remote',
+                action: payload.eventType,
+                updatedBy: row.updated_by || 'Staff',
+                timestamp: row.updated_at || new Date().toISOString(),
+              });
+            } catch (e) {
+              console.error('[SupabaseRealtime] Listener error:', e);
+            }
+          });
+        }
+      }
+    )
     .subscribe(async (status: string) => {
       if (status === 'SUBSCRIBED') {
         await activeChannel.track(userPayload);
@@ -201,5 +251,48 @@ export async function fetchAllDeviceStatus(adminPhone: string = '01937200635'): 
     }));
   } catch {
     return [];
+  }
+}
+
+/**
+ * Subscribe to realtime data changes broadcasted across devices
+ */
+export function subscribeToRealtimeDataChanges(listener: RealtimeDataChangeListener): () => void {
+  dataChangeListeners.add(listener);
+  return () => {
+    dataChangeListeners.delete(listener);
+  };
+}
+
+/**
+ * Broadcast an instant state change to all other connected devices via Supabase Realtime
+ */
+export function broadcastRealtimeDataChange(
+  collection: string,
+  data: any,
+  action: string = 'UPDATE',
+  updatedBy: string = 'Staff'
+): void {
+  const deviceId = getOrCreateDeviceId();
+  const payload: RealtimeDataChangeEvent = {
+    collection,
+    data,
+    sourceDeviceId: deviceId,
+    action,
+    updatedBy,
+    timestamp: new Date().toISOString(),
+  };
+
+  if (activeChannel) {
+    try {
+      activeChannel.send({
+        type: 'broadcast',
+        event: 'erp_realtime_change',
+        payload,
+      });
+      console.log(`[SupabaseRealtime] Broadcasted ${collection} (${action}) to all connected devices.`);
+    } catch (e) {
+      console.debug('[SupabaseRealtime] Broadcast send note:', e);
+    }
   }
 }

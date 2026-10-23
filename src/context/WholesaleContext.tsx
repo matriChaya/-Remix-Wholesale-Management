@@ -91,9 +91,27 @@ import {
   idbGetState,
   safeStorage
 } from '../utils/indexedDbStorage';
-import { initSupabasePresence } from '../services/supabasePresenceService';
-import { syncAllToSupabase, fetchFromSupabase, pushEntityToSupabase } from '../services/supabaseSyncService';
+import {
+  initSupabasePresence,
+  subscribeToRealtimeDataChanges,
+  broadcastRealtimeDataChange,
+  getOrCreateDeviceId,
+} from '../services/supabasePresenceService';
+import {
+  syncAllToSupabase,
+  fetchFromSupabase,
+  pushEntityToSupabase,
+  flushOfflineQueueToSupabase,
+  queueOfflineDataChange,
+} from '../services/supabaseSyncService';
 import { isSupabaseConfigured } from '../services/supabaseClient';
+import {
+  silentAutoUploadInvoiceDocument,
+  silentAutoUploadPaymentReceipt,
+  drainLocalPendingQueue,
+  isAutoSigningEnabled,
+  setAutoSigningEnabled,
+} from '../services/supabaseStorageService';
 
 interface WholesaleContextType {
   language: Language;
@@ -668,6 +686,9 @@ interface WholesaleContextType {
   closeSupabaseModal: () => void;
   syncToSupabaseNow: () => Promise<{ success: boolean; message: string; count?: number }>;
   restoreFromSupabaseNow: () => Promise<{ success: boolean; message: string }>;
+  isAutoSigning: boolean;
+  toggleAutoSigning: (enabled?: boolean) => void;
+  drainPendingFilesNow: () => Promise<number>;
 }
 
 export const DELETED_USERS_STORAGE_KEY = 'ws_deleted_user_ids';
@@ -1844,6 +1865,107 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   };
 
+  const [isAutoSigning, setIsAutoSigning] = useState<boolean>(isAutoSigningEnabled);
+  const toggleAutoSigning = (enabled?: boolean) => {
+    const next = enabled !== undefined ? enabled : !isAutoSigning;
+    setIsAutoSigning(next);
+    setAutoSigningEnabled(next);
+  };
+
+  const drainPendingFilesNow = async (): Promise<number> => {
+    return await drainLocalPendingQueue();
+  };
+
+  // Background silent auto-drain every 20 seconds (Guarantees zero pending files)
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (typeof navigator !== 'undefined' && navigator.onLine) {
+        drainLocalPendingQueue().catch(() => {});
+      }
+    }, 20000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const isRemoteUpdateRef = useRef<boolean>(false);
+
+  // Helper: Realtime Auto-Sync & Instant Multi-Device Broadcast via Supabase (Zero Hassle)
+  const autoSyncToSupabase = useCallback(
+    (collection: string, data: any) => {
+      if (isRemoteUpdateRef.current) return;
+      const adminPhone = currentUser?.adminPhone || currentUser?.phone || '01937200635';
+      const userName = currentUser?.name || 'Staff';
+      pushEntityToSupabase(collection, data, adminPhone, userName).catch(() => {});
+    },
+    [currentUser]
+  );
+
+  // Multi-Device Instant Real-Time Synchronization Listener (Supabase Channels)
+  useEffect(() => {
+    const unsub = subscribeToRealtimeDataChanges((event) => {
+      const { collection, data, sourceDeviceId } = event;
+      if (sourceDeviceId === getOrCreateDeviceId()) return; // Prevent echo back
+
+      console.log(`[SupabaseRealtime] Multi-device live sync received for: ${collection}`);
+      isRemoteUpdateRef.current = true;
+
+      try {
+        if (collection === 'products' && Array.isArray(data)) {
+          setProducts(data);
+          safeStorage.setItem('ws_products', JSON.stringify(data));
+        } else if (collection === 'orders' && Array.isArray(data)) {
+          setOrders(data);
+          safeStorage.setItem('ws_orders', JSON.stringify(data));
+        } else if (collection === 'retailers' && Array.isArray(data)) {
+          setRetailers(data);
+          safeStorage.setItem('ws_retailers', JSON.stringify(data));
+        } else if (collection === 'suppliers' && Array.isArray(data)) {
+          setSuppliers(data);
+          safeStorage.setItem('ws_suppliers', JSON.stringify(data));
+        } else if (collection === 'supplierLedger' && Array.isArray(data)) {
+          setSupplierLedger(data);
+          safeStorage.setItem('ws_supplier_ledger', JSON.stringify(data));
+        } else if (collection === 'cashTransfers' && Array.isArray(data)) {
+          setCashTransfers(data);
+          safeStorage.setItem('ws_cash_transfers', JSON.stringify(data));
+        } else if (collection === 'expenses' && Array.isArray(data)) {
+          setExpenses(data);
+          safeStorage.setItem('ws_expenses', JSON.stringify(data));
+        } else if (collection === 'replacements' && Array.isArray(data)) {
+          setReplacements(data);
+          safeStorage.setItem('ws_replacements', JSON.stringify(data));
+        } else if (collection === 'capitalTransactions' && Array.isArray(data)) {
+          setCapitalTransactions(data);
+          safeStorage.setItem('ws_capital_transactions', JSON.stringify(data));
+        } else if (collection === 'bankAccounts' && Array.isArray(data)) {
+          setBankAccounts(data);
+          safeStorage.setItem('ws_bank_accounts', JSON.stringify(data));
+        }
+      } finally {
+        setTimeout(() => {
+          isRemoteUpdateRef.current = false;
+        }, 150);
+      }
+    });
+
+    return () => unsub();
+  }, []);
+
+  // Offline-to-Online Auto-Signing & Silent Queue Flush upon Network Reconnection
+  useEffect(() => {
+    const handleNetworkOnline = async () => {
+      console.log('[SupabaseOnline] Connection restored! Flushing offline queue with official auto-signature...');
+      try {
+        await drainLocalPendingQueue();
+        await flushOfflineQueueToSupabase(currentUser?.adminPhone || currentUser?.phone || '01937200635');
+      } catch (e) {
+        console.debug('Online reconnect sync note:', e);
+      }
+    };
+
+    window.addEventListener('online', handleNetworkOnline);
+    return () => window.removeEventListener('online', handleNetworkOnline);
+  }, [currentUser]);
+
   const isInitialSeedDone = useRef<boolean>(false);
   const lastLocalSyncPingRef = useRef<number>(0);
   const sendPresenceHeartbeatRef = useRef<() => void>(() => {});
@@ -1860,15 +1982,18 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   useEffect(() => {
     safeStorage.setItem('ws_products', JSON.stringify(products));
     idbSetState('ws_products', products);
-  }, [products]);
+    autoSyncToSupabase('products', products);
+  }, [products, autoSyncToSupabase]);
 
   useEffect(() => {
     safeStorage.setItem('ws_suppliers', JSON.stringify(suppliers));
-  }, [suppliers]);
+    autoSyncToSupabase('suppliers', suppliers);
+  }, [suppliers, autoSyncToSupabase]);
 
   useEffect(() => {
     safeStorage.setItem('ws_supplier_ledger', JSON.stringify(supplierLedger));
-  }, [supplierLedger]);
+    autoSyncToSupabase('supplierLedger', supplierLedger);
+  }, [supplierLedger, autoSyncToSupabase]);
 
   const hasReconciledSuppliersRef = useRef<boolean>(false);
 
@@ -1916,24 +2041,29 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   useEffect(() => {
     safeStorage.setItem('ws_retailers', JSON.stringify(retailers));
-  }, [retailers]);
+    autoSyncToSupabase('retailers', retailers);
+  }, [retailers, autoSyncToSupabase]);
 
   useEffect(() => {
     safeStorage.setItem('ws_cash_transfers', JSON.stringify(cashTransfers));
-  }, [cashTransfers]);
+    autoSyncToSupabase('cashTransfers', cashTransfers);
+  }, [cashTransfers, autoSyncToSupabase]);
 
   useEffect(() => {
     safeStorage.setItem('ws_capital_tx', JSON.stringify(capitalTransactions));
-  }, [capitalTransactions]);
+    autoSyncToSupabase('capitalTransactions', capitalTransactions);
+  }, [capitalTransactions, autoSyncToSupabase]);
 
   useEffect(() => {
     safeStorage.setItem('ws_replacements', JSON.stringify(replacements));
-  }, [replacements]);
+    autoSyncToSupabase('replacements', replacements);
+  }, [replacements, autoSyncToSupabase]);
 
   useEffect(() => {
     safeStorage.setItem('ws_orders', JSON.stringify(orders));
     idbSetState('ws_orders', orders);
-  }, [orders]);
+    autoSyncToSupabase('orders', orders);
+  }, [orders, autoSyncToSupabase]);
 
   useEffect(() => {
     safeStorage.setItem('ws_phone_contacts', JSON.stringify(phoneContacts));
@@ -5895,28 +6025,25 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
     pingRealtimeSync(creatorRole, 1).catch(() => {});
 
-    // Automatically post staff transaction to Admin Google Drive buffer
+    // ⚡ Direct Real-Time Online Database Sync & Instant Multi-Device Broadcast via Supabase (Zero Hassle)
     try {
-      import('../services/googleDriveService').then(({ postStaffTransactionToAdminDrive }) => {
-        postStaffTransactionToAdminDrive(
-          {
-            deviceId: typeof window !== 'undefined' ? localStorage.getItem('ws_device_id') || 'terminal' : 'terminal',
-            role: creatorRole,
-            name: creatorName,
-            phone: creatorPhone || currentUser.phone || '',
-          },
-          {
-            type: 'SALES_INVOICE',
-            invoiceNo: newInvoice.invoiceNo,
-            totalAmount,
-            paidAmount,
-            dueAmount,
-            retailerName: orderData.retailerName,
-            paymentMethod,
-            timestamp: newInvoice.date || new Date().toISOString(),
-          }
-        ).catch(() => {});
-      }).catch(() => {});
+      autoSyncToSupabase('orders', [newInvoice, ...orders]);
+      autoSyncToSupabase('products', products);
+    } catch (e) {
+      console.debug('autoSyncToSupabase invoice note:', e);
+    }
+
+    // Silent Real-Time Auto-Upload directly to Supabase Persistent Storage with Admin Auto-Signature (Zero Pending Guarantee)
+    try {
+      silentAutoUploadInvoiceDocument(
+        newInvoice,
+        {
+          role: creatorRole,
+          name: creatorName,
+          phone: creatorPhone || currentUser.phone || '',
+        },
+        currentUser?.adminPhone || currentUser?.phone || '01937200635'
+      ).catch(() => {});
     } catch {}
 
     return newInvoice;
@@ -9865,6 +9992,9 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         closeSupabaseModal,
         syncToSupabaseNow,
         restoreFromSupabaseNow,
+        isAutoSigning,
+        toggleAutoSigning,
+        drainPendingFilesNow,
 
         // Biometric Authentication & Secure Storage Bridge
         isBiometricLocked,

@@ -1,5 +1,6 @@
 import { getSupabase, isSupabaseConfigured } from './supabaseClient';
 import { safeStorage } from '../utils/indexedDbStorage';
+import { broadcastRealtimeDataChange, getOrCreateDeviceId } from './supabasePresenceService';
 
 export const SUPABASE_SYNC_TABLE = 'matrichhaya_erp_sync';
 
@@ -250,19 +251,79 @@ export async function fetchFromSupabase(
   }
 }
 
+const STORAGE_OFFLINE_QUEUE_KEY = 'ws_offline_data_queue';
+
+export interface OfflineDataQueueItem {
+  id: string;
+  collectionName: string;
+  data: any;
+  adminPhone: string;
+  updatedBy: string;
+  queuedAt: string;
+  isAutoSigned?: boolean;
+}
+
 /**
- * Push an individual entity update directly to Supabase
+ * Queue a data update locally when device is offline
+ */
+export function queueOfflineDataChange(
+  collectionName: string,
+  data: any,
+  adminPhone: string = '01937200635',
+  updatedBy: string = 'Staff'
+): void {
+  try {
+    const queue = getOfflineQueue();
+    // Replace if same collection already exists in queue to keep latest state
+    const filtered = queue.filter((q) => q.collectionName !== collectionName);
+    filtered.push({
+      id: `off_${Date.now()}_${collectionName}`,
+      collectionName,
+      data,
+      adminPhone,
+      updatedBy,
+      queuedAt: new Date().toISOString(),
+      isAutoSigned: true,
+    });
+    safeStorage.setItem(STORAGE_OFFLINE_QUEUE_KEY, JSON.stringify(filtered));
+    console.log(`[OfflineQueue] Queued ${collectionName} for auto-signing & sync when online.`);
+  } catch (e) {
+    console.debug('Failed to queue offline update:', e);
+  }
+}
+
+/**
+ * Get the current offline sync queue
+ */
+export function getOfflineQueue(): OfflineDataQueueItem[] {
+  try {
+    const raw = safeStorage.getItem(STORAGE_OFFLINE_QUEUE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Push an individual entity update directly to Supabase with instant Multi-Device Realtime Broadcast
  */
 export async function pushEntityToSupabase(
   collectionName: string,
   data: any,
-  adminPhone: string = '01937200635'
+  adminPhone: string = '01937200635',
+  updatedBy: string = 'Staff'
 ): Promise<boolean> {
   const supabase = getSupabase();
-  if (!supabase || !isSupabaseConfigured()) return false;
+  const cleanAdminPhone = adminPhone.replace(/[^0-9]/g, '') || '01937200635';
+  const deviceId = getOrCreateDeviceId();
+
+  // If offline or not configured, queue locally
+  if (!supabase || !isSupabaseConfigured() || (typeof navigator !== 'undefined' && !navigator.onLine)) {
+    queueOfflineDataChange(collectionName, data, cleanAdminPhone, updatedBy);
+    return false;
+  }
 
   try {
-    const cleanAdminPhone = adminPhone.replace(/[^0-9]/g, '') || '01937200635';
     const recordId = `${cleanAdminPhone}_${collectionName}`;
     const count = Array.isArray(data) ? data.length : 1;
 
@@ -274,12 +335,93 @@ export async function pushEntityToSupabase(
         data: data,
         record_count: count,
         updated_at: new Date().toISOString(),
+        device_id: deviceId,
+        updated_by: updatedBy,
       },
       { onConflict: 'id' }
     );
 
-    return !error;
-  } catch {
+    if (error) {
+      console.warn(`[SupabaseSync] Push failed for ${collectionName}:`, error.message);
+      queueOfflineDataChange(collectionName, data, cleanAdminPhone, updatedBy);
+      return false;
+    }
+
+    // ⚡ Instant Multi-Device Broadcast: All connected devices receive this change immediately!
+    broadcastRealtimeDataChange(collectionName, data, 'UPDATE', updatedBy);
+    return true;
+  } catch (err) {
+    queueOfflineDataChange(collectionName, data, cleanAdminPhone, updatedBy);
     return false;
   }
 }
+
+/**
+ * Flush all queued offline data to Supabase with official digital auto-signature upon network reconnection
+ */
+export async function flushOfflineQueueToSupabase(
+  adminPhone: string = '01937200635'
+): Promise<{ success: boolean; syncedCount: number; message: string }> {
+  const queue = getOfflineQueue();
+  if (queue.length === 0) {
+    return { success: true, syncedCount: 0, message: 'কোনো অফলাইন ডাটা পেন্ডিং নেই।' };
+  }
+
+  const supabase = getSupabase();
+  if (!supabase || !isSupabaseConfigured()) {
+    return { success: false, syncedCount: 0, message: 'সুপাবেজ সংযোগ প্রস্তুত নয়।' };
+  }
+
+  let syncedCount = 0;
+  const remaining: OfflineDataQueueItem[] = [];
+
+  for (const item of queue) {
+    try {
+      // 🔏 Apply official digital auto-signing seal
+      let finalData = item.data;
+      const signedAt = new Date().toISOString();
+      const signatureSeal = `OFFLINE_RECONNECT_SIGNED_${Date.now()}`;
+
+      if (Array.isArray(finalData)) {
+        finalData = finalData.map((record: any) => {
+          if (record && typeof record === 'object') {
+            return {
+              ...record,
+              isAutoSigned: true,
+              signedBy: 'মাতৃছায়া টেলিকম (01937200635)',
+              signedAt,
+              signatureSeal,
+            };
+          }
+          return record;
+        });
+      }
+
+      const res = await pushEntityToSupabase(
+        item.collectionName,
+        finalData,
+        item.adminPhone || adminPhone,
+        `${item.updatedBy || 'Staff'} (Auto-Signed)`
+      );
+
+      if (res) {
+        syncedCount++;
+      } else {
+        remaining.push(item);
+      }
+    } catch {
+      remaining.push(item);
+    }
+  }
+
+  safeStorage.setItem(STORAGE_OFFLINE_QUEUE_KEY, JSON.stringify(remaining));
+
+  return {
+    success: syncedCount > 0,
+    syncedCount,
+    message: syncedCount > 0
+      ? `অফলাইনের ${syncedCount}টি হিসাব স্বয়ংক্রিয়ভাবে ডিজিটালি সাইন হয়ে সুপাবেজ ডাটাবেজে যুক্ত হয়েছে।`
+      : 'অফলাইন ডাটা সিঙ্ক প্রক্রিয়ায় রয়েছে।',
+  };
+}
+

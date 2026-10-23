@@ -470,14 +470,9 @@ export const AndroidHeader: React.FC<AndroidHeaderProps> = ({
               <span className="truncate">
                 {currentUser.name} {currentUser.shopName ? `• ${currentUser.shopName}` : ''}
               </span>
-              <span className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-slate-900 border border-slate-700/80 text-emerald-400 font-mono text-[9px]" title="১ম স্তর: ডিভাইস মেমরি ➔ ২য় স্তর: গুগল ড্রাইভ ➔ ৩য় স্তর: ক্লাউড অ্যাকাউন্ট">
-                ⚡১. মেমরি ➔ ☁️২. ড্রাইভ ➔ 🌐৩. ক্লাউড
+              <span className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-slate-900 border border-emerald-500/40 text-emerald-300 font-mono text-[9px]" title="১ম স্তর: লোকাল মেমরি (তাত্ক্ষণিক) ➔ ২য় স্তর: সুপাবেজ ক্লাউড ও অটো-সাইন (প্রধান ডাটাবেজ) ➔ ৩য় স্তর: গুগল ড্রাইভ (ঐচ্ছিক ব্যাকআপ)">
+                ⚡১. লোকাল ➔ 🌐২. সুপাবেজ ক্লাউড ও অটো-সাইন ➔ ☁️৩. ড্রাইভ (ঐচ্ছিক)
               </span>
-              {hasCloudQuotaNotice && (
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded bg-amber-500/20 border border-amber-500/40 text-amber-300 text-[9px] font-semibold animate-pulse" title="ক্লাউড স্পেস পর্যাপ্ত না থাকলেও গুগল ড্রাইভের কারণে অ্যাপটি শতভাগ সচল রয়েছে">
-                  ☁️ ড্রাইভ রানিং
-                </span>
-              )}
             </div>
           </div>
         </div>
@@ -584,27 +579,27 @@ export const AndroidHeader: React.FC<AndroidHeaderProps> = ({
             <span className="hidden sm:inline font-bold">{language === 'bn' ? 'স্টাফ সিঙ্ক' : 'Sync'}</span>
           </button>
 
-          {/* Cloud & Google Drive 15GB Backup Hub Trigger */}
-          <button
-            onClick={openBackupModal}
-            id="btn-header-cloud-backup-trigger"
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-sky-950/70 hover:bg-sky-900/80 text-sky-300 border border-sky-500/40 text-xs font-semibold transition-all active:scale-95 shadow-sm cursor-pointer"
-            title={language === 'bn' ? 'ক্লাউড ব্যাকআপ ও গুগল ড্রাইভ (১৫ জিবি)' : 'Cloud Backup & Google Drive (15 GB)'}
-          >
-            <Cloud className="w-3.5 h-3.5 text-sky-400" />
-            <span className="hidden sm:inline font-bold">{language === 'bn' ? 'ড্রাইভ ব্যাকআপ' : 'Drive Backup'}</span>
-          </button>
-
-          {/* Supabase PostgreSQL & Realtime Hub Trigger */}
+          {/* Supabase PostgreSQL & Realtime Hub Trigger (Primary Live Cloud Database) */}
           <button
             onClick={() => openSupabaseModal('connect')}
             id="btn-header-supabase-trigger"
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-950/80 hover:bg-emerald-900 text-emerald-300 border border-emerald-500/50 text-xs font-semibold transition-all active:scale-95 shadow-sm cursor-pointer"
-            title={language === 'bn' ? 'সুপাবেজ (Supabase) ক্লাউড ডাটাবেজ ও রিয়েল-টাইম হাব' : 'Supabase Cloud Database & Realtime Hub'}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-950/90 hover:bg-emerald-900 text-emerald-300 border border-emerald-500/60 text-xs font-semibold transition-all active:scale-95 shadow-sm cursor-pointer shadow-emerald-950/50"
+            title={language === 'bn' ? 'সুপাবেজ (Supabase) ক্লাউড ডাটাবেজ ও লাইভ মাল্টি-ডিভাইস সিঙ্ক' : 'Supabase Cloud Live Database & Realtime Sync'}
           >
             <Database className="w-3.5 h-3.5 text-emerald-400" />
-            <span className="hidden sm:inline font-bold">{language === 'bn' ? 'সুপাবেজ ক্লাউড' : 'Supabase'}</span>
+            <span className="hidden sm:inline font-bold">{language === 'bn' ? 'সুপাবেজ ক্লাউড' : 'Supabase Live'}</span>
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          </button>
+
+          {/* Cloud & Google Drive Backup (Optional 3rd Tier Backup) */}
+          <button
+            onClick={openBackupModal}
+            id="btn-header-cloud-backup-trigger"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-semibold transition-all active:scale-95 shadow-sm cursor-pointer"
+            title={language === 'bn' ? 'গুগল ড্রাইভ ব্যাকআপ (প্রয়োজনে ৩য় স্তর হিসেবে ঐচ্ছিক ব্যাকআপ)' : 'Google Drive Backup (Optional 3rd Tier)'}
+          >
+            <Cloud className="w-3.5 h-3.5 text-sky-400" />
+            <span className="hidden sm:inline font-bold">{language === 'bn' ? 'ড্রাইভ (ঐচ্ছিক)' : 'Drive (Optional)'}</span>
           </button>
 
           {/* Connected Devices Fleet & Pending Files Trigger for Admin */}

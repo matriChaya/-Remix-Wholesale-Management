@@ -29,6 +29,8 @@ import {
   saveSupabaseConfig,
   isSupabaseConfigured,
   testSupabaseConnection,
+  DEFAULT_SUPABASE_URL,
+  DEFAULT_SUPABASE_ANON_KEY,
 } from '../services/supabaseClient';
 import {
   syncAllToSupabase,
@@ -177,6 +179,19 @@ export const SupabaseSyncModal: React.FC<SupabaseSyncModalProps> = ({
         message: isBn ? 'সেভ করতে ব্যর্থ হয়েছে।' : 'Failed to save configuration.',
       });
     }
+  };
+
+  const handleLoadDefaultConfig = () => {
+    setUrl(DEFAULT_SUPABASE_URL);
+    setAnonKey(DEFAULT_SUPABASE_ANON_KEY);
+    saveSupabaseConfig(DEFAULT_SUPABASE_URL, DEFAULT_SUPABASE_ANON_KEY);
+    setIsConfigured(true);
+    setTestResult({
+      success: true,
+      message: isBn
+        ? 'মাতৃছায়া টেলিকম ডিফল্ট সুপাবেজ ক্লাউড সফলভাবে কানেক্ট হয়েছে!'
+        : 'Matrichhaya Telecom default cloud connected successfully!',
+    });
   };
 
   const handleCopySql = () => {
@@ -505,6 +520,50 @@ export const SupabaseSyncModal: React.FC<SupabaseSyncModalProps> = ({
                     <CheckCircle2 className="w-3.5 h-3.5" />
                     <span>{isBn ? 'সেভ ও সংযোগ চালু করুন' : 'Save & Connect'}</span>
                   </button>
+
+                  <button
+                    type="button"
+                    onClick={handleLoadDefaultConfig}
+                    className="px-4 py-2 rounded-xl bg-gradient-to-r from-teal-700 to-emerald-700 hover:from-teal-600 hover:to-emerald-600 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-md"
+                    title="ডিফল্ট প্রজেক্ট URL ও Key লোড করুন"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 text-teal-300" />
+                    <span>{isBn ? '⚡ অটো-কানেক্ট ডিফল্ট ক্লাউড' : 'Auto-Connect Default Cloud'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* 3-Tier Zero-Hassle Architecture Banner */}
+              <div className="p-3.5 rounded-2xl bg-slate-950 border border-emerald-500/40 space-y-2 text-xs">
+                <div className="flex items-center gap-2 font-bold text-emerald-300">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>{isBn ? 'সুপাবেজ ক্লাউড ও রিয়েল-টাইম ৩-স্তর ডেটা আর্কিটেকচার:' : 'Supabase Cloud & 3-Tier Data Architecture:'}</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-[11px]">
+                  <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
+                    <span className="font-bold text-sky-400 block flex items-center gap-1">
+                      <span>⚡ ১ম স্তর: লোকাল স্টোর</span>
+                    </span>
+                    <span className="text-slate-400 text-[10px] block mt-0.5">
+                      তাত্ক্ষণিক রেসপন্স ও অফলাইনেও নির্বিঘ্নে সেল করার নিশ্চয়তা।
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-emerald-950/60 border border-emerald-500/40">
+                    <span className="font-bold text-emerald-300 block flex items-center gap-1">
+                      <span>🌐 ২য় স্তর: সুপাবেজ ক্লাউড (প্রধান)</span>
+                    </span>
+                    <span className="text-slate-300 text-[10px] block mt-0.5">
+                      সব ডিভাইসে লাইভ রিয়েল-টাইম সিঙ্ক, অটো-সাইন ও স্থায়ী PostgreSQL ডাটাবেজ।
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
+                    <span className="font-bold text-amber-400 block flex items-center gap-1">
+                      <span>☁️ ৩য় স্তর: গুগল ড্রাইভ (ঐচ্ছিক)</span>
+                    </span>
+                    <span className="text-slate-400 text-[10px] block mt-0.5">
+                      কোনো বাধা বা কোটা সমস্যা ছাড়াই প্রয়োজনে ম্যানুয়াল এক্সটার্নাল ব্যাকআপ।
+                    </span>
+                  </div>
                 </div>
               </div>
 

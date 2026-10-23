@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useWholesale } from '../context/WholesaleContext';
 import {
   Smartphone,
@@ -20,8 +20,14 @@ import {
   Download,
   Info,
   Database,
+  FileText,
+  Eye,
+  Check,
+  CheckCircle,
+  FileCheck,
 } from 'lucide-react';
 import { formatCurrency } from '../utils/translations';
+import { listSupabaseDocuments, ErpDocumentRecord } from '../services/supabaseStorageService';
 
 interface ConnectedDevicesFleetModalProps {
   isOpen: boolean;
@@ -43,11 +49,52 @@ export const ConnectedDevicesFleetModal: React.FC<ConnectedDevicesFleetModalProp
     isGoogleDriveConnected,
     hasCloudQuotaNotice,
     openSupabaseModal,
+    isAutoSigning,
+    toggleAutoSigning,
+    drainPendingFilesNow,
   } = useWholesale();
 
+  const [storedDocs, setStoredDocs] = useState<ErpDocumentRecord[]>([]);
+  const [showStoredDocs, setShowStoredDocs] = useState<boolean>(false);
   const [expandedDeviceId, setExpandedDeviceId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string; downloadUrl?: string } | null>(null);
+
+  const loadStoredDocuments = async () => {
+    try {
+      const docs = await listSupabaseDocuments();
+      setStoredDocs(docs);
+    } catch {}
+  };
+
+  useEffect(() => {
+    if (isOpen) {
+      loadStoredDocuments();
+    }
+  }, [isOpen]);
+
+  const handleDrainAllNow = async () => {
+    setIsProcessing(true);
+    setFeedback(null);
+    try {
+      const count = await drainPendingFilesNow();
+      await loadStoredDocuments();
+      await refreshRegisteredDevices();
+      setFeedback({
+        type: 'success',
+        message: language === 'bn'
+          ? `সফল হয়েছে! পেন্ডিং ফাইলগুলো স্বয়ংক্রিয়ভাবে ডিজিটালি সাইন হয়ে পেরেন্টস ক্লাউড স্টোরেজে সফলভাবে সংরক্ষিত হয়েছে।`
+          : `Success! Pending files were digitally signed and saved directly to Parent Cloud Storage.`,
+      });
+    } catch (err: any) {
+      setFeedback({
+        type: 'error',
+        message: err.message || 'পেরেন্টস স্টোরেজে সিঙ্ক করতে সমস্যা হয়েছে।',
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   const handleBufferAllToDrive = async () => {
     setIsProcessing(true);
@@ -313,36 +360,139 @@ export const ConnectedDevicesFleetModal: React.FC<ConnectedDevicesFleetModalProp
           </div>
         </div>
 
-        {/* Direct Google Drive Storage & Pending File Sync Strip */}
-        <div className="mx-5 mt-4 p-3.5 rounded-xl bg-slate-950/80 border border-indigo-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs shadow-md">
-          <div className="space-y-0.5">
-            <div className="flex items-center gap-1.5 font-bold text-white">
-              <span className="text-emerald-400">⚡১. ডিভাইস লোকাল মেমরি</span>
-              <span className="text-slate-500">➔</span>
-              <span className="text-sky-400">☁️২. সরাসরি এডমিন গুগল ড্রাইভ (১৫ GB)</span>
-              <span className="text-[9px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-mono">
-                ড্রাইভ সিঙ্ক সক্রিয়
-              </span>
+        {/* Parent Cloud Storage & Zero-Pending Auto-Signing Strip */}
+        <div className="mx-5 mt-4 p-4 rounded-xl bg-gradient-to-r from-emerald-950/80 via-slate-900 to-indigo-950/80 border border-emerald-500/50 flex flex-col gap-3 shadow-lg">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-bold text-white text-xs flex items-center gap-1.5">
+                  <Database className="w-4 h-4 text-emerald-400" />
+                  <span>{isBn ? 'পেরেন্টস ক্লাউড স্টোরেজ ও অটো-সাইনিং' : 'Parent Cloud Storage & Auto-Signing'}</span>
+                </span>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold flex items-center gap-1 ${
+                  isAutoSigning
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                    : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                }`}>
+                  <FileCheck className="w-3 h-3" />
+                  <span>{isAutoSigning ? (isBn ? 'অটো-সাইনিং সক্রিয়' : 'Auto-Signing Active') : (isBn ? 'অটো-সাইনিং নিষ্ক্রিয়' : 'Manual Signing')}</span>
+                </span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 font-mono">
+                  {storedDocs.length} {isBn ? 'টি ফাইল সংরক্ষিত' : 'Stored Files'}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-300">
+                {isBn
+                  ? 'কোন ফাইল পেন্ডিং থাকবে না। ইনভয়েস ও রসিদ তৈরি হওয়ার সাথে সাথেই স্বয়ংক্রিয়ভাবে ডিজিটালি সাইন হয়ে চুপচাপ রিয়েল-টাইম পেরেন্টস স্টোরেজে জমা হয়।'
+                  : 'Zero pending files. Invoices and receipts are instantly auto-signed and silently synced to parent cloud storage in real time.'}
+              </p>
             </div>
-            <p className="text-[11px] text-slate-300">
-              {isBn
-                ? 'পেন্ডিং ফাইলগুলো কোনো ক্লাউড একাউন্টে নয়, সরাসরি এডমিনের গুগল ড্রাইভে (argsm38@gmail.com) সাইন ও সংরক্ষিত হবে।'
-                : 'Pending files are signed and uploaded directly to Admin Google Drive, NOT to any external cloud account.'}
-            </p>
+
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              {/* Auto-signing toggle button */}
+              <button
+                type="button"
+                onClick={() => toggleAutoSigning()}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer border ${
+                  isAutoSigning
+                    ? 'bg-emerald-950/80 hover:bg-emerald-900 border-emerald-500/50 text-emerald-300'
+                    : 'bg-slate-800 hover:bg-slate-700 border-slate-600 text-slate-300'
+                }`}
+                title={isBn ? 'অটো-সাইনিং চালু বা বন্ধ করুন' : 'Toggle Auto-Signing'}
+              >
+                <FileCheck className="w-3.5 h-3.5" />
+                <span>{isAutoSigning ? (isBn ? 'স্বাক্ষর সক্রিয়' : 'Signed') : (isBn ? 'স্বাক্ষর চালু করুন' : 'Enable Signing')}</span>
+              </button>
+
+              {/* Instant Drain / Sync Button */}
+              <button
+                type="button"
+                onClick={handleDrainAllNow}
+                disabled={isProcessing}
+                className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs flex items-center gap-1.5 transition active:scale-95 disabled:opacity-50 cursor-pointer shadow-md shadow-emerald-950/50"
+                title={isBn ? 'পেন্ডিং ফাইল স্বয়ংক্রিয়ভাবে সাইন করে ক্লাউড স্টোরেজে জমা করুন' : 'Sign & Drain all pending files to cloud'}
+              >
+                <UploadCloud className="w-3.5 h-3.5" />
+                <span>{isBn ? '⚡ সব ফাইল সাইন ও জমা করুন' : 'Sign & Drain Now'}</span>
+              </button>
+
+              {/* View Stored Files Button */}
+              <button
+                type="button"
+                onClick={() => setShowStoredDocs(!showStoredDocs)}
+                className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold flex items-center gap-1 cursor-pointer transition"
+              >
+                <Eye className="w-3.5 h-3.5 text-sky-400" />
+                <span>{showStoredDocs ? (isBn ? 'লুকান' : 'Hide') : (isBn ? 'জমা হওয়া ফাইল' : 'Stored Files')}</span>
+                {showStoredDocs ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              </button>
+            </div>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0 flex-wrap">
-            <button
-              type="button"
-              onClick={handleBufferAllToDrive}
-              disabled={isProcessing}
-              className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-sky-600 to-indigo-600 hover:from-sky-500 hover:to-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 transition active:scale-95 disabled:opacity-50 cursor-pointer shadow-md shadow-indigo-950/50"
-              title="সকল পেন্ডিং ফাইল সরাসরি এডমিন গুগল ড্রাইভে সাইন ও আপলোড করুন"
-            >
-              <UploadCloud className="w-4 h-4" />
-              <span>{isBn ? '⚡ পেন্ডিং ফাইল ড্রাইভে সাইন করুন' : 'Sign Pending to Drive'}</span>
-            </button>
-          </div>
+          {/* Stored Documents Drawer */}
+          {showStoredDocs && (
+            <div className="pt-3 border-t border-slate-800/80 animate-in fade-in duration-150">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>{isBn ? 'পেরেন্টস ক্লাউড স্টোরেজে জমা হওয়া ফাইলসমূহ:' : 'Documents Saved in Parent Storage:'}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    openSupabaseModal('storage');
+                  }}
+                  className="text-[11px] text-emerald-400 hover:text-emerald-300 font-semibold underline cursor-pointer"
+                >
+                  {isBn ? 'সম্পূর্ণ স্টোরেজ ম্যানেজার খুলুন ↗' : 'Open Storage Manager ↗'}
+                </button>
+              </div>
+
+              {storedDocs.length === 0 ? (
+                <div className="p-3 text-center bg-slate-950/60 rounded-lg text-slate-400 text-xs">
+                  {isBn ? 'স্টোরেজে কোনো ফাইল জমা নেই। নতুন ইনভয়েস তৈরি করলে তা স্বয়ংক্রিয়ভাবে এখানে জমা হবে।' : 'No files stored yet. New invoices will auto-save here.'}
+                </div>
+              ) : (
+                <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                  {storedDocs.slice(0, 15).map((doc) => (
+                    <div
+                      key={doc.id}
+                      className="p-2 rounded-lg bg-slate-950/80 border border-slate-800 flex items-center justify-between gap-2 text-xs"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-emerald-400">📄</span>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-slate-200 truncate">{doc.fileName}</p>
+                          <p className="text-[10px] text-slate-400">
+                            {doc.category === 'invoice' ? 'বিক্রয় ইনভয়েস' : doc.category === 'receipt' ? 'পেমেন্ট রসিদ' : 'নথি'} • {new Date(doc.createdAt).toLocaleDateString('bn-BD')}
+                            {doc.isAutoSigned && ' • ✅ অটো-স্বাক্ষরিত'}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/50 px-1.5 py-0.5 rounded border border-emerald-800/40">
+                          {(doc.fileSize / 1024).toFixed(1)} KB
+                        </span>
+                        {doc.publicUrl && (
+                          <a
+                            href={doc.publicUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-sky-400 hover:text-sky-300"
+                            title={isBn ? 'ফাইল দেখুন' : 'View file'}
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Devices List */}

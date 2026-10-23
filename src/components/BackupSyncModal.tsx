@@ -675,60 +675,60 @@ export const BackupSyncModal: React.FC = () => {
           )}
 
           {/* 3-Tier Smart Storage Engine Architecture Banner */}
-          <div className="p-4 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 rounded-2xl border border-indigo-500/30 space-y-3">
+          <div className="p-4 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 rounded-2xl border border-emerald-500/40 space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <span className="text-base">🚀</span>
                 <div>
                   <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                    <span>{language === 'bn' ? '৩-স্তরীয় স্মার্ট স্টোরেজ আর্কিটেকচার (লেটেস্ট v3.5.0)' : '3-Tier Smart Storage Engine (v3.5.0)'}</span>
+                    <span>{language === 'bn' ? '৩-স্তরীয় স্মার্ট স্টোরেজ আর্কিটেকচার (সুপাবেজ ক্লাউড চালিত)' : '3-Tier Smart Storage Engine (Supabase Cloud Powered)'}</span>
                     <span className="px-2 py-0.5 rounded-full text-[10px] bg-emerald-500/20 text-emerald-300 font-bold border border-emerald-500/30">
-                      High Availability
+                      Real-Time Active
                     </span>
                   </h4>
                   <p className="text-[11px] text-slate-300">
                     {language === 'bn'
-                      ? 'ডিভাইস মেমোরি (ফাস্ট এক্সপ্রেস) ➔ গুগল ড্রাইভ (১৫ জিবি বাফার) ➔ ক্লাউড অ্যাকাউন্ট (মাস্টার আর্কাইভ)'
-                      : 'Device Memory (Fast Express) ➔ Google Drive (15 GB Buffer) ➔ Cloud Account (Master Archive)'}
+                      ? '১. লোকাল স্টোর (তাত্ক্ষণিক) ➔ ২. সুপাবেজ ক্লাউড ও অটো-সাইন (প্রধান রিয়েল-টাইম ডাটাবেজ) ➔ ৩. গুগল ড্রাইভ (ঐচ্ছিক ব্যাকআপ)'
+                      : '1. Local Store (Instant) ➔ 2. Supabase Cloud & Auto-Sign (Primary DB) ➔ 3. Google Drive (Optional Backup)'}
                   </p>
                 </div>
               </div>
               <span className="text-[11px] text-emerald-400 font-mono font-semibold bg-emerald-950/60 px-2.5 py-1 rounded-lg border border-emerald-500/30 self-start sm:self-auto">
-                ✓ {language === 'bn' ? 'অ্যাপ বিরতিহীন সচল' : 'App Always Running'}
+                ✓ {language === 'bn' ? 'সুপাবেজে লাইভ সিঙ্ক সচল' : 'Supabase Live Connected'}
               </span>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 text-xs">
               {/* Tier 1 */}
-              <div className="p-3 bg-slate-900/90 rounded-xl border border-emerald-500/30">
-                <div className="flex items-center justify-between font-bold text-emerald-300 mb-1">
-                  <span>১ম স্তর: ডিভাইস মেমোরি</span>
-                  <span className="text-[10px] bg-emerald-900/50 px-1.5 py-0.5 rounded text-emerald-200">ফাস্ট এক্সপ্রেস</span>
+              <div className="p-3 bg-slate-900/90 rounded-xl border border-sky-500/30">
+                <div className="flex items-center justify-between font-bold text-sky-300 mb-1">
+                  <span>১ম স্তর: লোকাল মেমরি</span>
+                  <span className="text-[10px] bg-sky-900/50 px-1.5 py-0.5 rounded text-sky-200">ফাস্ট এক্সপ্রেস</span>
                 </div>
                 <p className="text-[11px] text-slate-300 leading-relaxed">
-                  মোবাইল ও পিসির ইন্টারনাল স্টোরেজ (IndexedDB ও LocalStorage)। অফলাইন/অনলাইনে তাৎক্ষণিক স্পিড ও জিরো ল্যাগ।
+                  মোবাইল ও পিসির ইন্টারনাল স্টোরেজ (IndexedDB ও LocalStorage)। অফলাইন ও অনলাইনে তাৎক্ষণিক স্পিড ও জিরো ল্যাগ।
                 </p>
               </div>
 
               {/* Tier 2 */}
-              <div className="p-3 bg-slate-900/90 rounded-xl border border-indigo-500/30">
-                <div className="flex items-center justify-between font-bold text-indigo-300 mb-1">
-                  <span>২য় স্তর: গুগল ড্রাইভ</span>
-                  <span className="text-[10px] bg-indigo-900/50 px-1.5 py-0.5 rounded text-indigo-200">১৫ জিবি বাফার</span>
+              <div className="p-3 bg-slate-900/90 rounded-xl border border-emerald-500/40 bg-emerald-950/20">
+                <div className="flex items-center justify-between font-bold text-emerald-300 mb-1">
+                  <span>২য় স্তর: সুপাবেজ ক্লাউড</span>
+                  <span className="text-[10px] bg-emerald-900/60 px-1.5 py-0.5 rounded text-emerald-200">প্রধান ডাটাবেজ</span>
                 </div>
                 <p className="text-[11px] text-slate-300 leading-relaxed">
-                  পেন্ডিং ফাইল ও সকল মেমোরির ক্লাউড বাফার। ক্লাউড অ্যাকাউন্টে জায়গা না থাকলেও ড্রাইভের কারণে অ্যাপ রানিং থাকে।
+                  প্রতিটি বিক্রয়, প্রোডাক্ট ও লেজার স্বয়ংক্রিয়ভাবে ডিজিটালি সাইন হয়ে ক্লাউডে জমা হয় এবং সকল ডিভাইসে সাথে সাথেই রিয়েল-টাইমে ট্রান্সফার হয়।
                 </p>
               </div>
 
               {/* Tier 3 */}
-              <div className="p-3 bg-slate-900/90 rounded-xl border border-sky-500/30">
-                <div className="flex items-center justify-between font-bold text-sky-300 mb-1">
-                  <span>৩য় স্তর: ক্লাউড অ্যাকাউন্ট</span>
-                  <span className="text-[10px] bg-sky-900/50 px-1.5 py-0.5 rounded text-sky-200">মাস্টার আর্কাইভ</span>
+              <div className="p-3 bg-slate-900/90 rounded-xl border border-slate-700/60">
+                <div className="flex items-center justify-between font-bold text-amber-300 mb-1">
+                  <span>৩য় স্তর: গুগল ড্রাইভ</span>
+                  <span className="text-[10px] bg-amber-900/50 px-1.5 py-0.5 rounded text-amber-200">ঐচ্ছিক ব্যাকআপ</span>
                 </div>
                 <p className="text-[11px] text-slate-300 leading-relaxed">
-                  ফায়ারবেজ ফায়ারস্টোর। পূর্বের সকল হিসাব ও লেনদেন সহজেই খোঁজা, মাল্টি-ডিভাইস রিয়েল-টাইম অনলাইন ট্র্যাকিং।
+                  গুগল ড্রাইভ এখন ৩য় স্তরের ঐচ্ছিক ব্যাকআপ। কোনো কোটা বা জটলা ছাড়া প্রয়োজন হলে ইউজার যেকোনো সময় ব্যাকআপ সংরক্ষণ করতে পারেন।
                 </p>
               </div>
             </div>

@@ -1,8 +1,11 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// Default / fallback keys or environment variables
-const ENV_SUPABASE_URL = (import.meta as any).env?.VITE_SUPABASE_URL || '';
-const ENV_SUPABASE_ANON_KEY = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || '';
+// Default Project URL & API Key for "মাতৃছায়া টেলিকম ইআরপি" (Matrichhaya Telecom ERP)
+export const DEFAULT_SUPABASE_URL = 'https://yawbwppzvbnllxicvgxs.supabase.co';
+export const DEFAULT_SUPABASE_ANON_KEY = 'sb_publishable_4wo-cfHwFEzC-52xLmNgZg_t_uQLO1w';
+
+const ENV_SUPABASE_URL = ((import.meta as any).env?.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL).trim();
+const ENV_SUPABASE_ANON_KEY = ((import.meta as any).env?.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY).trim();
 
 const STORAGE_KEY_CONFIG = 'ws_supabase_config';
 
@@ -18,7 +21,7 @@ let clientInstance: SupabaseClient | null = null;
 let currentConfig: SupabaseConfig | null = null;
 
 /**
- * Retrieve the active Supabase configuration (from localStorage or environment variables)
+ * Retrieve the active Supabase configuration (from localStorage or environment variables or defaults)
  */
 export function getSupabaseConfig(): SupabaseConfig {
   if (typeof window !== 'undefined') {
@@ -41,8 +44,8 @@ export function getSupabaseConfig(): SupabaseConfig {
   }
 
   return {
-    url: ENV_SUPABASE_URL.trim(),
-    anonKey: ENV_SUPABASE_ANON_KEY.trim(),
+    url: ENV_SUPABASE_URL || DEFAULT_SUPABASE_URL,
+    anonKey: ENV_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY,
     bucketName: 'erp-documents',
     isCustom: false,
   };
