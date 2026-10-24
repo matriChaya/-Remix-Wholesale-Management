@@ -85,6 +85,8 @@ export const BackupSyncModal: React.FC = () => {
     currentUser,
     pullFromGoogleDrive,
     syncToGoogleDrive,
+    isDriveBackupEnabled,
+    toggleDriveBackup,
   } = useWholesale();
 
   const [syncStatusMsg, setSyncStatusMsg] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
@@ -986,6 +988,56 @@ export const BackupSyncModal: React.FC = () => {
                     {isEditingGmail ? (language === 'bn' ? 'বন্ধ করুন' : 'Close') : (language === 'bn' ? 'জিমেইল পরিবর্তন' : 'Change Gmail')}
                   </button>
                 )}
+              </div>
+            </div>
+
+            {/* HYBRID FALLBACK TOGGLE (Default: OFF) */}
+            <div className="p-3 bg-slate-950/90 rounded-xl border border-indigo-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-inner">
+              <div className="flex items-start sm:items-center gap-2.5">
+                <div className={`w-3.5 h-3.5 rounded-full shrink-0 mt-0.5 sm:mt-0 ${isDriveBackupEnabled ? 'bg-indigo-400 animate-pulse' : 'bg-emerald-500'}`} />
+                <div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-xs font-bold text-white">
+                      {language === 'bn' ? 'গুগল ড্রাইভ / ক্লাউড ব্যাকআপ সিঙ্ক (ঐচ্ছিক ব্যাকআপ)' : 'Google Drive / Cloud Backup (Optional Sync)'}
+                    </span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                      isDriveBackupEnabled 
+                        ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40' 
+                        : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                    }`}>
+                      {isDriveBackupEnabled 
+                        ? (language === 'bn' ? 'ড্রাইভ সিঙ্ক সক্রিয় (ON)' : 'Drive Sync Active (ON)') 
+                        : (language === 'bn' ? 'সুপাবেজ স্টোরেজ সরাসরি সক্রিয় (গুগল ড্রাইভ অফ)' : 'Supabase Direct Active (Drive OFF)')}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    {isDriveBackupEnabled
+                      ? (language === 'bn' ? 'ড্রাইভ ব্যাকআপ অন: সকল মেমো ও পেন্ডিং ফাইল স্বয়ংক্রিয়ভাবে এডমিন ড্রাইভে সিঙ্ক হবে।' : 'Drive backup is ON. Syncing pending invoices to Google Drive.')
+                      : (language === 'bn' ? 'ডিফল্টভাবে অফ: সকল মেমো সরাসরি সুপাবেজ ক্লাউড স্টোরেজে জমা হচ্ছে, কোনো পেন্ডিং কিউ বা JSON এরর ছাড়াই।' : 'Default OFF: All invoices upload directly to Supabase Storage with zero queue errors.')}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                <span className="text-[11px] font-bold text-slate-300">
+                  {isDriveBackupEnabled ? (language === 'bn' ? 'চালু' : 'ON') : (language === 'bn' ? 'বন্ধ' : 'OFF')}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => toggleDriveBackup()}
+                  className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                    isDriveBackupEnabled ? 'bg-indigo-600' : 'bg-slate-700'
+                  }`}
+                  role="switch"
+                  aria-checked={isDriveBackupEnabled}
+                  title="গুগল ড্রাইভ ব্যাকআপ টগল সুইচ"
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                      isDriveBackupEnabled ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
               </div>
             </div>
 

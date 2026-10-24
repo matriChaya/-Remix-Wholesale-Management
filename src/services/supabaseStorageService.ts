@@ -98,7 +98,12 @@ export async function uploadToSupabaseStorage(
     const cleanFileName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_');
     const storagePath = `${category}s/${timestamp}_${cleanFileName}`;
 
-    // 1. Upload to Supabase Storage
+    // Ensure bucket exists on Supabase project
+    try {
+      await supabase.storage.createBucket(bucket, { public: true });
+    } catch {}
+
+    // 1. Upload to Supabase Storage with upsert true
     const { error: storageError } = await supabase.storage
       .from(bucket)
       .upload(storagePath, fileBlob, {
@@ -197,7 +202,7 @@ export async function silentAutoUploadInvoiceDocument(
     const blob = new Blob([jsonString], { type: 'application/json' });
     const fileName = `INV_${invoice.invoiceNo || Date.now()}_SIGNED.json`;
 
-    // Silently upload without awaiting or throwing UI alert
+    // 1. Silently upload JSON data record
     uploadToSupabaseStorage(
       blob,
       fileName,
@@ -209,6 +214,82 @@ export async function silentAutoUploadInvoiceDocument(
     ).catch((err) => {
       console.debug('[SilentAutoUpload] Background invoice note:', err);
     });
+
+    // 2. Also generate and upload printable Document/PDF representation to Supabase Storage
+    try {
+      const itemsList = Array.isArray(invoice.items) ? invoice.items : [];
+      const rowsHtml = itemsList
+        .map(
+          (it: any, i: number) => `
+            <tr>
+              <td style="padding:6px;border-bottom:1px solid #e2e8f0;text-align:center;">${i + 1}</td>
+              <td style="padding:6px;border-bottom:1px solid #e2e8f0;">${it.productName || it.name || 'পণ্য'}</td>
+              <td style="padding:6px;border-bottom:1px solid #e2e8f0;text-align:center;">${it.quantity || 1} ${it.unit || 'টি'}</td>
+              <td style="padding:6px;border-bottom:1px solid #e2e8f0;text-align:right;">৳${(it.unitPrice || it.price || 0).toLocaleString()}</td>
+              <td style="padding:6px;border-bottom:1px solid #e2e8f0;text-align:right;font-weight:bold;">৳${(it.total || it.totalPrice || 0).toLocaleString()}</td>
+            </tr>`
+        )
+        .join('');
+
+      const docHtml = `<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="utf-8"/>
+  <title>Invoice #${invoice.invoiceNo || 'INV'}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 24px; color: #1e293b; }
+    .header { text-align: center; border-bottom: 2px solid #0284c7; padding-bottom: 12px; margin-bottom: 16px; }
+    .title { font-size: 22px; font-weight: bold; color: #0369a1; }
+    .meta { font-size: 13px; color: #64748b; margin-top: 4px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 16px 0; }
+    th { background: #f8fafc; padding: 8px; border-bottom: 2px solid #cbd5e1; text-align: left; }
+    .totals { margin-left: auto; width: 280px; font-size: 13px; }
+    .totals td { padding: 4px 8px; }
+    .badge { display: inline-block; padding: 6px 12px; border: 1.5px dashed #059669; border-radius: 8px; color: #059669; font-weight: bold; font-size: 11px; margin-top: 20px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="title">মাতৃছায়া টেলিকম</div>
+    <div class="meta">প্রোঃ মোঃ আরিয়ান আহমেদ | মোবাইল: 01937200635</div>
+    <div style="font-weight:bold;margin-top:6px;font-size:15px;">চালান / মেমো: #${invoice.invoiceNo || 'INV'}</div>
+    <div class="meta">তারিখ: ${invoice.date || new Date().toISOString().slice(0, 10)} | কাস্টমার: ${invoice.retailerName || invoice.customerName || 'নগদ ক্রেতা'}</div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:40px;text-align:center;">#</th>
+        <th>পণ্যের বিবরণ</th>
+        <th style="width:80px;text-align:center;">পরিমাণ</th>
+        <th style="width:90px;text-align:right;">দর</th>
+        <th style="width:100px;text-align:right;">মোট টাকা</th>
+      </tr>
+    </thead>
+    <tbody>${rowsHtml}</tbody>
+  </table>
+  <table class="totals">
+    <tr><td>মোট মূল্য:</td><td style="text-align:right;font-weight:bold;">৳${(invoice.totalAmount || invoice.subtotal || 0).toLocaleString()}</td></tr>
+    <tr><td>নগদ আদায়:</td><td style="text-align:right;color:#059669;font-weight:bold;">৳${(invoice.paidAmount || 0).toLocaleString()}</td></tr>
+    <tr><td>বর্তমান বাকি:</td><td style="text-align:right;color:#dc2626;font-weight:bold;">৳${(invoice.dueAmount || 0).toLocaleString()}</td></tr>
+  </table>
+  <div style="text-align:center;">
+    <div class="badge">✓ সুপাবেজ ক্লাউড স্টোরেজে ডিজিটাল সাইন ও সংরক্ষিত (${adminPhone})</div>
+  </div>
+</body>
+</html>`;
+
+      const docBlob = new Blob([docHtml], { type: 'text/html;charset=utf-8' });
+      const docName = `INV_${invoice.invoiceNo || Date.now()}_PRINT.html`;
+      uploadToSupabaseStorage(
+        docBlob,
+        docName,
+        'invoice',
+        invoice.invoiceNo,
+        creator.phone || adminPhone,
+        creator.name || 'Staff',
+        isSigned
+      ).catch(() => {});
+    } catch {}
   } catch (err) {
     console.debug('[SilentAutoUpload] Exception ignored for non-blocking UI:', err);
   }

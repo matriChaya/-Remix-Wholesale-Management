@@ -1,1 +1,18 @@
-[]
+[
+  {
+    "deviceId": "dev_laptop_mvgkcjpb_l7ob1",
+    "adminPhone": "01937200635",
+    "role": "admin",
+    "phone": "01937200635",
+    "name": "মাতৃছায়া টেলিকম",
+    "deviceType": "ল্যাপটপ / কম্পিউটার POS",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+    "firstInstalledAt": "2026-10-23T10:47:03.505Z",
+    "lastSeenAt": "2026-10-23T10:47:14.352Z",
+    "lastHeartbeatMs": 1792752434352,
+    "ip": "103.157.92.138, 169.254.169.126",
+    "appVersion": "3.0.0",
+    "pendingFilesCount": 0,
+    "pendingItems": []
+  }
+]

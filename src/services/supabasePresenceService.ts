@@ -12,6 +12,51 @@ export interface LiveDevicePresence {
   isOnline: boolean;
   joinedAt: string;
   lastSeen: string;
+  lastActiveTimeFormatted?: string;
+}
+
+export type UserRoleKey = 'admin' | 'counter' | 'dsr' | 'retailer';
+
+export function normalizeRoleKey(role?: string): UserRoleKey {
+  const r = (role || '').toLowerCase();
+  if (r === 'admin' || r.includes('admin') || r.includes('এডমিন')) return 'admin';
+  if (r === 'dsr' || r.includes('dsr') || r.includes('ডিএসআর')) return 'dsr';
+  if (r === 'retailer' || r.includes('retailer') || r.includes('খুচরা')) return 'retailer';
+  return 'counter';
+}
+
+export function formatActiveTime(isoDate?: string): string {
+  if (!isoDate) return 'Active: --:--';
+  try {
+    const d = new Date(isoDate);
+    let hours = d.getHours();
+    const minutes = d.getMinutes();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    const minStr = minutes < 10 ? `0${minutes}` : `${minutes}`;
+    const hrStr = hours < 10 ? `0${hours}` : `${hours}`;
+    return `Active: ${hrStr}:${minStr} ${ampm}`;
+  } catch {
+    return 'Active: --:--';
+  }
+}
+
+export function formatActiveTimeBn(isoDate?: string): string {
+  if (!isoDate) return 'সক্রিয়: --:--';
+  try {
+    const d = new Date(isoDate);
+    let hours = d.getHours();
+    const minutes = d.getMinutes();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    const minStr = minutes < 10 ? `0${minutes}` : `${minutes}`;
+    const hrStr = hours < 10 ? `0${hours}` : `${hours}`;
+    return `সক্রিয়: ${hrStr}:${minStr} ${ampm}`;
+  } catch {
+    return 'সক্রিয়: --:--';
+  }
 }
 
 export interface RealtimeDataChangeEvent {
@@ -74,6 +119,8 @@ export function initSupabasePresence(currentUser: UserProfile): void {
 
   const deviceId = getOrCreateDeviceId();
   currentDeviceId = deviceId;
+  const roleKey = normalizeRoleKey(currentUser.role);
+  const rolePresenceKey = `role_${roleKey}`;
 
   // Clean up existing channel if already connected
   if (activeChannel) {
@@ -83,25 +130,35 @@ export function initSupabasePresence(currentUser: UserProfile): void {
     activeChannel = null;
   }
 
+  const roleLabels: Record<UserRoleKey, string> = {
+    admin: 'এডমিন (মাতৃছায়া)',
+    counter: 'ক্যাশ কাউন্টার (ল্যাপটপ POS)',
+    dsr: 'রাজু আলম (ফিল্ড ডিএসআর)',
+    retailer: 'খুচরা বিক্রেতা (কাস্টমার)',
+  };
+
+  const nowIso = new Date().toISOString();
   const userPayload: LiveDevicePresence = {
-    deviceId,
-    userId: currentUser.id || 'usr_anonymous',
-    name: currentUser.name || 'কর্মী',
-    role: currentUser.role || 'counter',
+    deviceId: rolePresenceKey,
+    userId: currentUser.id || `usr_${roleKey}`,
+    name: currentUser.name || roleLabels[roleKey],
+    role: roleKey,
     phone: currentUser.phone || '01937200635',
     email: currentUser.email || '',
     platform: detectPlatform(),
     isOnline: true,
-    joinedAt: new Date().toISOString(),
-    lastSeen: new Date().toISOString(),
+    joinedAt: nowIso,
+    lastSeen: nowIso,
+    lastActiveTimeFormatted: formatActiveTime(nowIso),
   };
 
   const channelName = `matrichhaya_presence_${(currentUser.adminRef || currentUser.adminPhone || '01937200635').replace(/[^0-9]/g, '')}`;
 
+  // Key presence by Role Identity so each Role has exactly 1 unified slot
   activeChannel = supabase.channel(channelName, {
     config: {
       presence: {
-        key: deviceId,
+        key: rolePresenceKey,
       },
     },
   });
@@ -109,20 +166,27 @@ export function initSupabasePresence(currentUser: UserProfile): void {
   const notifyListeners = () => {
     if (!activeChannel) return;
     const presenceState = activeChannel.presenceState();
-    const liveList: LiveDevicePresence[] = [];
+    
+    // Group strictly by User Role Identity (Admin, DSR, Cash Counter, Retailer)
+    const roleMap = new Map<UserRoleKey, LiveDevicePresence>();
 
     Object.keys(presenceState).forEach((key) => {
       const presences = presenceState[key];
       if (Array.isArray(presences) && presences.length > 0) {
         const item = presences[presences.length - 1] as LiveDevicePresence;
-        liveList.push({
+        const normalizedRole = normalizeRoleKey(item.role || key.replace('role_', ''));
+        const timeFormatted = formatActiveTime(item.lastSeen || new Date().toISOString());
+        roleMap.set(normalizedRole, {
           ...item,
-          deviceId: key,
+          role: normalizedRole,
+          deviceId: `role_${normalizedRole}`,
           isOnline: true,
+          lastActiveTimeFormatted: timeFormatted,
         });
       }
     });
 
+    const liveList = Array.from(roleMap.values());
     listeners.forEach((fn) => fn(liveList));
   };
 
@@ -130,10 +194,10 @@ export function initSupabasePresence(currentUser: UserProfile): void {
     .on('presence', { event: 'sync' }, () => {
       notifyListeners();
     })
-    .on('presence', { event: 'join' }, ({ newPresences }: any) => {
+    .on('presence', { event: 'join' }, () => {
       notifyListeners();
     })
-    .on('presence', { event: 'leave' }, ({ leftPresences }: any) => {
+    .on('presence', { event: 'leave' }, () => {
       notifyListeners();
     })
     // 1. Cross-device Realtime Broadcast for Instant Multi-Device State Synchronization
@@ -179,10 +243,10 @@ export function initSupabasePresence(currentUser: UserProfile): void {
         await activeChannel.track(userPayload);
         notifyListeners();
 
-        // Also asynchronously persist to erp_device_presence table
+        // Overwrite single role record in erp_device_presence table (zero history bloat)
         try {
           await supabase.from('erp_device_presence').upsert({
-            device_id: deviceId,
+            device_id: rolePresenceKey,
             user_id: userPayload.userId,
             name: userPayload.name,
             role: userPayload.role,
@@ -237,18 +301,28 @@ export async function fetchAllDeviceStatus(adminPhone: string = '01937200635'): 
 
     if (error || !data) return [];
 
-    return data.map((d: any) => ({
-      deviceId: d.device_id,
-      userId: d.user_id,
-      name: d.name,
-      role: d.role,
-      phone: d.phone,
-      email: d.email,
-      platform: d.platform || 'mobile',
-      isOnline: Boolean(d.is_online),
-      joinedAt: d.created_at || d.last_active,
-      lastSeen: d.last_active,
-    }));
+    // Deduplicate solely by role identity
+    const roleMap = new Map<UserRoleKey, LiveDevicePresence>();
+    data.forEach((d: any) => {
+      const r = normalizeRoleKey(d.role || d.device_id?.replace('role_', ''));
+      if (!roleMap.has(r)) {
+        roleMap.set(r, {
+          deviceId: `role_${r}`,
+          userId: d.user_id,
+          name: d.name,
+          role: r,
+          phone: d.phone,
+          email: d.email,
+          platform: d.platform || 'mobile',
+          isOnline: Boolean(d.is_online),
+          joinedAt: d.created_at || d.last_active,
+          lastSeen: d.last_active,
+          lastActiveTimeFormatted: formatActiveTime(d.last_active),
+        });
+      }
+    });
+
+    return Array.from(roleMap.values());
   } catch {
     return [];
   }

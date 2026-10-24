@@ -115,6 +115,31 @@ export const isGoogleDriveConnected = (): boolean => {
   return false;
 };
 
+export const STORAGE_DRIVE_BACKUP_TOGGLE_KEY = 'ws_drive_backup_toggle';
+
+/**
+ * Check if Google Drive / CloudBD backup sync is manually toggled ON.
+ * DEFAULT IS STRICTLY OFF (false).
+ * Primary storage is Supabase Storage Direct Sync (erp-documents bucket).
+ */
+export const isDriveBackupToggleEnabled = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  try {
+    const val = localStorage.getItem(STORAGE_DRIVE_BACKUP_TOGGLE_KEY);
+    // Explicitly false by default
+    return val === null ? false : JSON.parse(val) === true;
+  } catch {
+    return false;
+  }
+};
+
+export const setDriveBackupToggleEnabled = (enabled: boolean): void => {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(STORAGE_DRIVE_BACKUP_TOGGLE_KEY, JSON.stringify(enabled));
+  } catch {}
+};
+
 // Retrieve stored Google account info (defaults to linked Admin Gmail)
 export const getStoredGoogleAccount = (): { email: string | null; displayName: string | null; photoURL: string | null } => {
   if (typeof window === 'undefined') {
@@ -616,6 +641,29 @@ export const uploadBackupToGoogleDrive = async (
   const finalFileName = fileName || `matrichaya_erp_backup_${dateStr}_${timeStr}.json`;
   const fileContent = JSON.stringify(backupData, null, 2);
 
+  // If Drive backup toggle is OFF, bypass Google Drive upload and buffer completely
+  if (!isDriveBackupToggleEnabled()) {
+    try {
+      await fetch('/api/backup/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: fileContent,
+      });
+    } catch {}
+    return {
+      success: true,
+      file: {
+        id: `local_bkp_${Date.now()}`,
+        name: finalFileName,
+        size: String(new Blob([fileContent]).size),
+        createdTime: now.toISOString(),
+        modifiedTime: now.toISOString(),
+        source: 'cloud_server',
+      },
+      message: 'গুগল ড্রাইভ ব্যাকআপ টগল বন্ধ রয়েছে — ব্যাকআপটি লোকাল সার্ভারে সংরক্ষিত হয়েছে।',
+    };
+  }
+
   // Always save backup to local server backend archive
   try {
     await fetch('/api/backup/save', {
@@ -776,6 +824,14 @@ export const postStaffTransactionToAdminDrive = async (
   staffInfo: { deviceId?: string; role: string; name: string; phone: string },
   transaction: any
 ): Promise<{ success: boolean; message: string }> => {
+  // If Drive backup toggle is OFF, completely bypass external webhook / queue (Supabase Direct Storage is active)
+  if (!isDriveBackupToggleEnabled()) {
+    return {
+      success: true,
+      message: 'গুগল ড্রাইভ ব্যাকআপ টগল বন্ধ রয়েছে — সুপাবেজ ক্লাউড স্টোরেজে সরাসরি সংরক্ষিত হচ্ছে।',
+    };
+  }
+
   const adminCfg = getStoredAdminDriveConfig();
   const payload = {
     deviceId: staffInfo.deviceId || 'staff_device',
@@ -895,6 +951,13 @@ export const downloadBackupFromGoogleDrive = async (fileId: string): Promise<any
 
 // Pull the latest master sync data from Google Drive or cloud server for cross-device update
 export const pullLatestGoogleDriveData = async (): Promise<{ success: boolean; data?: any; filename?: string; message: string }> => {
+  if (!isDriveBackupToggleEnabled()) {
+    return {
+      success: false,
+      message: 'গুগল ড্রাইভ ব্যাকআপ বর্তমানে অফ রয়েছে। ড্রাইভ থেকে ডাটা নামাতে ড্রাইভ ব্যাকআপ অপশনটি অন করুন।',
+    };
+  }
+
   const adminCfg = getStoredAdminDriveConfig();
   const token = getDriveAccessToken();
 
@@ -994,6 +1057,14 @@ export const uploadPendingFilesToGoogleDrive = async (
   pendingItems: any[],
   meta?: any
 ): Promise<{ success: boolean; message: string }> => {
+  // If Drive backup toggle is OFF, bypass completely — prevents any unexpected JSON errors!
+  if (!isDriveBackupToggleEnabled()) {
+    return {
+      success: true,
+      message: 'গুগল ড্রাইভ ব্যাকআপ টগল বন্ধ রয়েছে (সুপাবেজ স্টোরেজ সরাসরি সক্রিয়)। কোনো এক্সটার্নাল ড্রাইভ রিকোয়েস্ট পাঠানো হয়নি।',
+    };
+  }
+
   const adminCfg = getStoredAdminDriveConfig();
   if (!pendingItems || pendingItems.length === 0) {
     return { success: true, message: 'কোনো পেন্ডিং ফাইল নেই।' };
@@ -1054,6 +1125,13 @@ export const uploadPendingFilesToGoogleDrive = async (
 export const pushDriveDataToCloudAccount = async (
   onFirestoreCommit?: (data: any) => Promise<void>
 ): Promise<{ success: boolean; message: string; recordCounts?: any }> => {
+  if (!isDriveBackupToggleEnabled()) {
+    return {
+      success: false,
+      message: 'গুগল ড্রাইভ ব্যাকআপ টগল বন্ধ রয়েছে। ড্রাইভ থেকে ক্লাউডে পুশ করতে ড্রাইভ ব্যাকআপ টগলটি চালু করুন।',
+    };
+  }
+
   const pullResult = await pullLatestGoogleDriveData();
   if (!pullResult.success || !pullResult.data) {
     return { success: false, message: pullResult.message || 'গুগল ড্রাইভে কোনো সিঙ্ক ডাটা পাওয়া যায়নি।' };

@@ -112,6 +112,10 @@ import {
   isAutoSigningEnabled,
   setAutoSigningEnabled,
 } from '../services/supabaseStorageService';
+import {
+  isDriveBackupToggleEnabled,
+  setDriveBackupToggleEnabled,
+} from '../services/googleDriveService';
 
 interface WholesaleContextType {
   language: Language;
@@ -633,6 +637,10 @@ interface WholesaleContextType {
   pullFromGoogleDrive: () => Promise<{ success: boolean; message: string; counts?: any }>;
   isGoogleDriveConnected: boolean;
   googleDriveAccount: { email: string | null; displayName: string | null };
+
+  // Hybrid Fallback & Drive Backup Toggle (Default: OFF)
+  isDriveBackupEnabled: boolean;
+  toggleDriveBackup: (enabled?: boolean) => void;
 
   // 3-Tier Storage Pipeline (১. ডিভাইস মেমরি ➔ ২. গুগল ড্রাইভ ➔ ৩. ক্লাউড একাউন্ট)
   isAppRunningViaDrive: boolean;
@@ -1644,8 +1652,31 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const updateBusinessProfile = (updates: Partial<BusinessProfile>): BusinessProfile => {
     const updated = saveStoredBusinessProfile(updates);
     setBusinessProfileState(updated);
+
+    // Propagate centrally to Supabase for all roles (DSR, Cash Counter, Retailer)
+    try {
+      pushEntityToSupabase('business_profile', updated).catch(() => {});
+      broadcastRealtimeDataChange('business_profile', updated, 'UPDATE', currentUser?.name || 'Admin');
+    } catch (e) {
+      console.debug('[BusinessProfile] Supabase push note:', e);
+    }
+
     return updated;
   };
+
+  // Centralized Business Profile Auto-Sync from Supabase Single Source of Truth
+  useEffect(() => {
+    if (isSupabaseConfigured()) {
+      fetchFromSupabase('business_profile')
+        .then((profileData) => {
+          if (profileData && typeof profileData === 'object' && (profileData as any).enterpriseName) {
+            const merged = saveStoredBusinessProfile(profileData as Partial<BusinessProfile>);
+            setBusinessProfileState(merged);
+          }
+        })
+        .catch(() => {});
+    }
+  }, []);
 
   useEffect(() => {
     const handleProfileUpdated = (e: any) => {
@@ -1939,6 +1970,10 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         } else if (collection === 'bankAccounts' && Array.isArray(data)) {
           setBankAccounts(data);
           safeStorage.setItem('ws_bank_accounts', JSON.stringify(data));
+        } else if (collection === 'business_profile' && data && typeof data === 'object') {
+          console.log('[SupabaseRealtime] Auto-syncing centralized business profile from Admin to this panel');
+          const merged = saveStoredBusinessProfile(data as Partial<BusinessProfile>);
+          setBusinessProfileState(merged);
         }
       } finally {
         setTimeout(() => {
@@ -2995,6 +3030,16 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const isGoogleDriveConnected = Boolean(googleDriveAccount.isConnected && googleDriveAccount.email);
 
+  // Hybrid Fallback: Optional Google Drive / CloudBD sync (Default: OFF)
+  const [isDriveBackupEnabled, setIsDriveBackupEnabled] = useState<boolean>(() => isDriveBackupToggleEnabled());
+  const toggleDriveBackup = useCallback((enabled?: boolean) => {
+    setIsDriveBackupEnabled((prev) => {
+      const next = enabled !== undefined ? enabled : !prev;
+      setDriveBackupToggleEnabled(next);
+      return next;
+    });
+  }, []);
+
   // 3-Tier Storage & Google Drive Resilient Failover State
   const [hasCloudQuotaNotice, setHasCloudQuotaNotice] = useState<boolean>(false);
   const [cloudQuotaMessage, setCloudQuotaMessage] = useState<string>(
@@ -3021,6 +3066,12 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   // Upload/Sync current master database state to Google Drive
   const syncToGoogleDrive = useCallback(async (): Promise<{ success: boolean; message: string }> => {
     try {
+      if (!isDriveBackupEnabled) {
+        return {
+          success: false,
+          message: 'গুগল ড্রাইভ ব্যাকআপ অপশনটি বর্তমানে অফ রয়েছে। ড্রাইভ ব্যাকআপ নিতে সুইচটি অন করুন।',
+        };
+      }
       const { uploadBackupToGoogleDrive, isGoogleDriveConnected } = await import('../services/googleDriveService');
       if (!isGoogleDriveConnected()) {
         return { success: false, message: 'গুগল ড্রাইভ সংযুক্ত নেই। দয়া করে যে কোনো জিমেইল দিয়ে গুগল ড্রাইভে কানেক্ট করুন।' };
@@ -3098,6 +3149,12 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   // Pull latest master file from Google Drive and merge without losing local data
   const pullFromGoogleDrive = useCallback(async (): Promise<{ success: boolean; message: string; counts?: any }> => {
     try {
+      if (!isDriveBackupEnabled) {
+        return {
+          success: false,
+          message: 'গুগল ড্রাইভ ব্যাকআপ অপশনটি বর্তমানে অফ রয়েছে। ড্রাইভ থেকে সিঙ্ক করতে সুইচটি অন করুন।',
+        };
+      }
       const { pullLatestGoogleDriveData } = await import('../services/googleDriveService');
       const res = await pullLatestGoogleDriveData();
       if (!res.success || !res.data) {
@@ -3232,6 +3289,14 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   // 1. Manually / Automatically push pending offline queue directly to Google Drive
   const uploadPendingQueueToGoogleDriveNow = useCallback(async (): Promise<{ success: boolean; message: string }> => {
     try {
+      // If Drive backup toggle is OFF, bypass completely — eliminates any pending JSON errors!
+      if (!isDriveBackupEnabled) {
+        return {
+          success: true,
+          message: 'গুগল ড্রাইভ ব্যাকআপ টগল বন্ধ রয়েছে — সুপাবেজ ক্লাউড স্টোরেজ সরাসরি সক্রিয় থাকায় ড্রাইভ কিউ বাইপাস করা হয়েছে।',
+        };
+      }
+
       const { isGoogleDriveConnected, uploadPendingFilesToGoogleDrive } = await import('../services/googleDriveService');
       if (!isGoogleDriveConnected()) {
         return { success: false, message: 'গুগল ড্রাইভ কানেক্ট করা নেই। দয়া করে যে কোনো জিমেইল দিয়ে ড্রাইভ কানেক্ট করুন।' };
@@ -3260,11 +3325,17 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     } catch (err: any) {
       return { success: false, message: err.message || 'গুগল ড্রাইভে পেন্ডিং ফাইল আপলোড ব্যর্থ হয়েছে।' };
     }
-  }, [offlineSyncQueue, currentRole, currentUser]);
+  }, [isDriveBackupEnabled, offlineSyncQueue, currentRole, currentUser]);
 
   // 2. Push data from Google Drive into Tier 3 Cloud Account
   const pushDriveToCloudAccount = useCallback(async (): Promise<{ success: boolean; message: string; recordCounts?: any }> => {
     try {
+      if (!isDriveBackupEnabled) {
+        return {
+          success: false,
+          message: 'গুগল ড্রাইভ ব্যাকআপ সুইচটি বর্তমানে অফ রয়েছে।',
+        };
+      }
       const { pushDriveDataToCloudAccount } = await import('../services/googleDriveService');
       const res = await pushDriveDataToCloudAccount(async (snapshot) => {
         if (snapshot && snapshot.id) {
@@ -3281,7 +3352,7 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     } catch (err: any) {
       return { success: false, message: err.message || 'ড্রাইভ থেকে ক্লাউডে পুশ করতে সমস্যা হয়েছে।' };
     }
-  }, []);
+  }, [isDriveBackupEnabled]);
 
   // 3. Retrieve previous accounts and archives from Cloud & Google Drive
   const retrievePastAccountsFromCloudOrDrive = useCallback(async (): Promise<{ success: boolean; message: string; pastBackups: any[] }> => {
@@ -5466,6 +5537,19 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     });
     saveToFirestoreDoc(COLLECTIONS.ORDERS, newOrder.id, newOrder);
 
+    // Silent Real-Time Auto-Upload to Supabase Storage (Mandatory Default File Handler)
+    try {
+      silentAutoUploadInvoiceDocument(
+        newOrder,
+        {
+          name: actualName,
+          role: actualRole,
+          phone: actualPhone,
+        },
+        currentUser?.adminPhone || currentUser?.phone || '01937200635'
+      ).catch(() => {});
+    } catch {}
+
     // 4. Update Cash Drawer if paid in cash
     if (safePaidAmount > 0 && (newOrder.paymentMethod === 'Cash' || !newOrder.paymentMethod)) {
       setUsers((prev) =>
@@ -6881,6 +6965,19 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       return next;
     });
     saveToFirestoreDoc(COLLECTIONS.ORDERS, newOrder.id, newOrder);
+
+    // Silent Real-Time Auto-Upload to Supabase Storage (Mandatory Default File Handler)
+    try {
+      silentAutoUploadInvoiceDocument(
+        newOrder,
+        {
+          name: currentUser?.name || (data.operatorMode === 'DSR' ? 'DSR Representative' : 'Cash Counter'),
+          role: data.operatorMode === 'DSR' ? 'dsr' : 'counter',
+          phone: currentUser?.phone || '01937200635',
+        },
+        currentUser?.adminPhone || currentUser?.phone || '01937200635'
+      ).catch(() => {});
+    } catch {}
 
     // 5. Update Cash Drawer if paid in cash
     if (actualPaid > 0 && (data.paymentMethod === 'Cash' || !data.paymentMethod)) {
@@ -9962,6 +10059,10 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         pullFromGoogleDrive,
         isGoogleDriveConnected,
         googleDriveAccount,
+
+        // Hybrid Fallback & Drive Backup Toggle (Default: OFF)
+        isDriveBackupEnabled,
+        toggleDriveBackup,
 
         // 3-Tier Storage Pipeline (১. ডিভাইস মেমরি ➔ ২. গুগল ড্রাইভ ➔ ৩. ক্লাউড একাউন্ট)
         isAppRunningViaDrive,

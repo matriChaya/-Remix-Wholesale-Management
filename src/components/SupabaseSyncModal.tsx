@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useWholesale } from '../context/WholesaleContext';
 import {
   Database,
@@ -23,6 +23,7 @@ import {
   X,
   Eye,
   Lock,
+  Store,
 } from 'lucide-react';
 import {
   getSupabaseConfig,
@@ -42,6 +43,10 @@ import {
   fetchAllDeviceStatus,
   LiveDevicePresence,
   getOrCreateDeviceId,
+  normalizeRoleKey,
+  formatActiveTime,
+  formatActiveTimeBn,
+  UserRoleKey,
 } from '../services/supabasePresenceService';
 import {
   uploadToSupabaseStorage,
@@ -148,6 +153,83 @@ export const SupabaseSyncModal: React.FC<SupabaseSyncModalProps> = ({
   }, [isOpen, currentUser]);
 
   if (!isOpen) return null;
+
+  // Group live presence solely by canonical User Role Identity (Admin, DSR, Cash Counter, Retailer)
+  const canonicalRolePresence = useMemo(() => {
+    const roles: Array<{
+      key: UserRoleKey;
+      nameBn: string;
+      nameEn: string;
+      descBn: string;
+      descEn: string;
+      defaultPhone: string;
+    }> = [
+      {
+        key: 'admin',
+        nameBn: 'এডমিন মাতৃছায়া (সেন্ট্রাল কন্ট্রোল)',
+        nameEn: 'Admin Matrichaya (HQ)',
+        descBn: 'মাস্টার অ্যাকাউন্ট ও ফুল পারমিশন',
+        descEn: 'Master Account & Global Control',
+        defaultPhone: '01937200635',
+      },
+      {
+        key: 'counter',
+        nameBn: 'ক্যাশ কাউন্টার (পয়েন্ট অব সেল)',
+        nameEn: 'Cash Counter (POS Desk)',
+        descBn: 'দোকানের ক্যাশ কাউন্টার ও ড্রয়ার ডেস্ক',
+        descEn: 'In-store Billing & Drawer Desk',
+        defaultPhone: '01711000001',
+      },
+      {
+        key: 'dsr',
+        nameBn: 'ডিএসআর (ফিল্ড সেলস অফিসার)',
+        nameEn: 'DSR (Field Sales Officer)',
+        descBn: 'মাঠে অর্ডার গ্রহণ, ডেলিভারি ও কালেকশন',
+        descEn: 'Field Order Booking & Collection',
+        defaultPhone: '01811000002',
+      },
+      {
+        key: 'retailer',
+        nameBn: 'খুচরা বিক্রেতা (রিটেইলার পোর্টাল)',
+        nameEn: 'Retailer (Customer Portal)',
+        descBn: 'দোকানদার স্বয়ংক্রিয় অর্ডার ও হিসাব পোর্টাল',
+        descEn: 'Retail Shop Order & Balance Portal',
+        defaultPhone: '01911000003',
+      },
+    ];
+
+    return roles.map((rDef) => {
+      const matching = liveDevices.filter(
+        (d) => normalizeRoleKey(d.role) === rDef.key || d.deviceId === `role_${rDef.key}`
+      );
+      const isOnline = matching.some((d) => Boolean(d.isOnline));
+
+      const latestDev = [...matching].sort((a, b) => {
+        const tA = new Date(a.lastSeen || 0).getTime();
+        const tB = new Date(b.lastSeen || 0).getTime();
+        return tB - tA;
+      })[0];
+
+      const phone = latestDev?.phone || rDef.defaultPhone;
+      const email = latestDev?.email;
+      const lastSeen = latestDev?.lastSeen;
+      const formattedActive = latestDev?.lastActiveTimeFormatted || formatActiveTime(lastSeen);
+      const isCurrentRole = currentUser?.role === rDef.key;
+
+      return {
+        roleKey: rDef.key,
+        name: isBn ? rDef.nameBn : rDef.nameEn,
+        desc: isBn ? rDef.descBn : rDef.descEn,
+        phone,
+        email,
+        isOnline,
+        lastSeen,
+        formattedActive,
+        isCurrentRole,
+        platform: latestDev?.platform || 'mobile',
+      };
+    });
+  }, [liveDevices, currentUser, isBn]);
 
   const handleTestConnection = async () => {
     setIsTesting(true);
@@ -711,92 +793,97 @@ export const SupabaseSyncModal: React.FC<SupabaseSyncModalProps> = ({
             </div>
           )}
 
-          {/* TAB 3: REALTIME PRESENCE */}
+          {/* TAB 3: REALTIME PRESENCE (Deduplicated & Unified by Role Identity) */}
           {activeTab === 'presence' && (
             <div className="space-y-3.5">
               <div className="p-3 rounded-2xl bg-slate-950 border border-slate-800 flex items-center justify-between">
                 <div className="flex items-center gap-2 text-xs">
                   <Radio className="w-4 h-4 text-emerald-400 animate-pulse" />
                   <span className="font-bold text-white">
-                    {isBn ? 'সুপাবেজ রিয়েল-টাইম প্রেজেন্স চ্যানেল সক্রিয়' : 'Supabase Realtime Channel Active'}
+                    {isBn ? 'সুপাবেজ রিয়েল-টাইম রোল প্রেজেন্স (একক স্ট্যাটাস ভিউ)' : 'Supabase Realtime Role Presence (Single Status View)'}
                   </span>
                 </div>
-                <span className="text-[11px] text-slate-400 font-mono">
-                  {liveDevices.length} {isBn ? 'ডিভাইস ট্র্যাক হচ্ছে' : 'devices tracked'}
+                <span className="text-[11px] text-emerald-400 font-mono font-bold">
+                  {canonicalRolePresence.filter((r) => r.isOnline).length}/4 {isBn ? 'রোল অনলাইনে সক্রিয়' : 'Roles Online'}
                 </span>
               </div>
 
-              {liveDevices.length === 0 ? (
-                <div className="p-8 text-center rounded-2xl bg-slate-950/60 border border-slate-800">
-                  <Radio className="w-8 h-8 text-slate-600 mx-auto mb-2 animate-pulse" />
-                  <p className="text-xs text-slate-400">
-                    {isBn ? 'কোনো ডিভাইস সক্রিয় নেই।' : 'No active devices currently online.'}
-                  </p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {liveDevices.map((dev) => (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {canonicalRolePresence.map((role) => {
+                  const isAdmin = role.roleKey === 'admin';
+                  const isCounter = role.roleKey === 'counter';
+                  const isDsr = role.roleKey === 'dsr';
+                  const isRetailer = role.roleKey === 'retailer';
+
+                  return (
                     <div
-                      key={dev.deviceId}
+                      key={role.roleKey}
                       className={`p-3.5 rounded-2xl border transition ${
-                        dev.deviceId === myDeviceId
-                          ? 'bg-emerald-950/40 border-emerald-500/40'
-                          : 'bg-slate-950 border-slate-800'
+                        role.isCurrentRole
+                          ? 'bg-emerald-950/40 border-emerald-500/40 shadow-sm shadow-emerald-950/40'
+                          : role.isOnline
+                          ? 'bg-slate-950/90 border-emerald-500/30'
+                          : 'bg-slate-950/40 border-slate-800'
                       }`}
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-300">
-                            {dev.platform === 'mobile' ? (
-                              <Smartphone className="w-4 h-4 text-sky-400" />
-                            ) : (
-                              <Laptop className="w-4 h-4 text-emerald-400" />
-                            )}
+                          <div
+                            className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${
+                              isAdmin
+                                ? 'bg-purple-950/80 text-purple-400 border-purple-500/40'
+                                : isCounter
+                                ? 'bg-sky-950/80 text-sky-400 border-sky-500/40'
+                                : isDsr
+                                ? 'bg-indigo-950/80 text-indigo-400 border-indigo-500/40'
+                                : 'bg-teal-950/80 text-teal-400 border-teal-500/40'
+                            }`}
+                          >
+                            {isAdmin && <Shield className="w-4 h-4" />}
+                            {isCounter && <Laptop className="w-4 h-4" />}
+                            {isDsr && <Smartphone className="w-4 h-4" />}
+                            {isRetailer && <Store className="w-4 h-4" />}
                           </div>
-                          <div>
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-xs font-bold text-white">{dev.name}</span>
-                              {dev.deviceId === myDeviceId && (
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-xs font-bold text-white truncate">{role.name}</span>
+                              {role.isCurrentRole && (
                                 <span className="px-1.5 py-0.2 rounded-full text-[9px] bg-emerald-500/20 text-emerald-400 font-bold">
-                                  {isBn ? 'এই ডিভাইস' : 'This Device'}
+                                  {isBn ? 'এই রোল' : 'Current'}
                                 </span>
                               )}
                             </div>
-                            <span className="text-[10px] text-slate-400 font-mono">{dev.phone}</span>
-                            {dev.email && (
-                              <span className="text-[9px] text-slate-500 block truncate font-mono">
-                                📧 {dev.email}
-                              </span>
-                            )}
+                            <span className="text-[10px] text-slate-400 font-mono block">📞 {role.phone}</span>
+                            <span className="text-[10px] text-slate-500 block truncate">{role.desc}</span>
                           </div>
                         </div>
 
                         <span
-                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 ${
-                            dev.isOnline
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 shrink-0 ${
+                            role.isOnline
                               ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                              : 'bg-slate-800 text-slate-400'
+                              : 'bg-slate-800 text-slate-400 border border-slate-700'
                           }`}
                         >
                           <span
                             className={`w-1.5 h-1.5 rounded-full ${
-                              dev.isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
+                              role.isOnline ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'
                             }`}
                           ></span>
-                          <span>{dev.isOnline ? (isBn ? 'অনলাইন' : 'Online') : (isBn ? 'অফলাইন' : 'Offline')}</span>
+                          <span>{role.isOnline ? (isBn ? 'অনলাইন' : 'Online') : (isBn ? 'অফলাইন' : 'Offline')}</span>
                         </span>
                       </div>
 
-                      <div className="mt-2 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400">
-                        <span className="capitalize">{dev.role} • {dev.platform}</span>
-                        <span className="font-mono">
-                          {isBn ? 'সর্বশেষ:' : 'Active:'} {new Date(dev.lastSeen).toLocaleTimeString()}
+                      <div className="mt-2.5 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400">
+                        <span className="font-mono text-slate-500">role_{role.roleKey}</span>
+                        <span className="font-mono text-emerald-300 font-bold">
+                          {role.formattedActive}
                         </span>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
+                  );
+                })}
+              </div>
             </div>
           )}
 

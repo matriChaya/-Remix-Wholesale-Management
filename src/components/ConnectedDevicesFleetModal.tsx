@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useWholesale } from '../context/WholesaleContext';
 import {
   Smartphone,
@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { formatCurrency } from '../utils/translations';
 import { listSupabaseDocuments, ErpDocumentRecord } from '../services/supabaseStorageService';
+import { formatActiveTime, formatActiveTimeBn, normalizeRoleKey, UserRoleKey } from '../services/supabasePresenceService';
 
 interface ConnectedDevicesFleetModalProps {
   isOpen: boolean;
@@ -52,6 +53,8 @@ export const ConnectedDevicesFleetModal: React.FC<ConnectedDevicesFleetModalProp
     isAutoSigning,
     toggleAutoSigning,
     drainPendingFilesNow,
+    isDriveBackupEnabled,
+    toggleDriveBackup,
   } = useWholesale();
 
   const [storedDocs, setStoredDocs] = useState<ErpDocumentRecord[]>([]);
@@ -220,8 +223,84 @@ export const ConnectedDevicesFleetModal: React.FC<ConnectedDevicesFleetModalProp
     };
   });
 
-  const totalPendingCount = allDevices.reduce((sum, d) => sum + (d.pendingFilesCount || 0), 0);
-  const onlineCount = allDevices.filter((d) => d.isOnline).length;
+  // Group fleet status strictly by canonical User Role Identity (Admin, DSR, Cash Counter, Retailer)
+  const roleCards = useMemo(() => {
+    const roles: Array<{
+      key: UserRoleKey;
+      nameBn: string;
+      nameEn: string;
+      descBn: string;
+      descEn: string;
+      defaultPhone: string;
+    }> = [
+      {
+        key: 'admin',
+        nameBn: 'এডমিন মাতৃছায়া (সেন্ট্রাল কন্ট্রোল)',
+        nameEn: 'Admin Matrichaya (HQ)',
+        descBn: 'মাস্টার অ্যাকাউন্ট ও ফুল পারমিশন',
+        descEn: 'Master Account & Global Control',
+        defaultPhone: adminPhone,
+      },
+      {
+        key: 'counter',
+        nameBn: 'ক্যাশ কাউন্টার (পয়েন্ট অব সেল)',
+        nameEn: 'Cash Counter (POS Desk)',
+        descBn: 'দোকানের ক্যাশ কাউন্টার ও ড্রয়ার ডেস্ক',
+        descEn: 'In-store Billing & Drawer Desk',
+        defaultPhone: '01711000001',
+      },
+      {
+        key: 'dsr',
+        nameBn: 'ডিএসআর (ফিল্ড সেলস অফিসার)',
+        nameEn: 'DSR (Field Sales Officer)',
+        descBn: 'মাঠে অর্ডার গ্রহণ, ডেলিভারি ও কালেকশন',
+        descEn: 'Field Order Booking & Collection',
+        defaultPhone: '01811000002',
+      },
+      {
+        key: 'retailer',
+        nameBn: 'খুচরা বিক্রেতা (রিটেইলার পোর্টাল)',
+        nameEn: 'Retailer (Customer Portal)',
+        descBn: 'দোকানদার স্বয়ংক্রিয় অর্ডার ও হিসাব পোর্টাল',
+        descEn: 'Retail Shop Order & Balance Portal',
+        defaultPhone: '01911000003',
+      },
+    ];
+
+    return roles.map((rDef) => {
+      const matching = allDevices.filter((d) => normalizeRoleKey(d.role) === rDef.key);
+      const isOnline = matching.some((d) => Boolean(d.isOnline));
+      const pendingFilesCount = matching.reduce((sum, d) => sum + (d.pendingFilesCount || 0), 0);
+      const pendingItems = matching.flatMap((d) => d.pendingItems || []);
+
+      const latestDev = [...matching].sort((a, b) => {
+        const tA = new Date(a.lastSeenAt || 0).getTime();
+        const tB = new Date(b.lastSeenAt || 0).getTime();
+        return tB - tA;
+      })[0];
+
+      const phone = latestDev?.phone || rDef.defaultPhone;
+      const lastSeenAt = latestDev?.lastSeenAt;
+      const formattedActive = formatActiveTime(lastSeenAt);
+
+      return {
+        roleKey: rDef.key,
+        name: isBn ? rDef.nameBn : rDef.nameEn,
+        desc: isBn ? rDef.descBn : rDef.descEn,
+        phone,
+        isOnline,
+        lastSeenAt,
+        formattedActive,
+        pendingFilesCount,
+        pendingItems,
+        devicesCount: matching.length,
+        primaryDeviceId: latestDev?.deviceId || `role_${rDef.key}`,
+      };
+    });
+  }, [allDevices, adminPhone, isBn]);
+
+  const totalPendingCount = roleCards.reduce((sum, r) => sum + r.pendingFilesCount, 0);
+  const onlineCount = roleCards.filter((r) => r.isOnline).length;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200">
@@ -235,9 +314,9 @@ export const ConnectedDevicesFleetModal: React.FC<ConnectedDevicesFleetModalProp
             </div>
             <div>
               <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
-                <span>{isBn ? 'কানেক্টেড ডিভাইস ও পেন্ডিং ফাইলস কন্ট্রোল' : 'Connected Devices & Pending Files'}</span>
+                <span>{isBn ? 'কানেক্টেড ডিভাইস ও লাইভ রোল প্রেজেন্স' : 'Connected Devices & Role Presence'}</span>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-mono bg-purple-900/60 text-purple-300 border border-purple-700/50">
-                  {allDevices.length} {isBn ? 'ডিভাইস' : 'Devices'}
+                  {roleCards.length} {isBn ? 'টি রোল' : 'Roles'}
                 </span>
               </h2>
               <p className="text-xs text-slate-400">
@@ -495,199 +574,247 @@ export const ConnectedDevicesFleetModal: React.FC<ConnectedDevicesFleetModalProp
           )}
         </div>
 
-        {/* Devices List */}
-        <div className="p-5 flex-1 overflow-y-auto space-y-3">
-          {allDevices.length === 0 ? (
-            <div className="p-8 text-center bg-slate-950/50 rounded-2xl border border-slate-800 space-y-2">
-              <Info className="w-8 h-8 text-slate-500 mx-auto" />
-              <p className="text-sm font-semibold text-slate-300">
-                {isBn ? 'কোনো ডিভাইস রেজিস্ট্রি এখনো পাওয়া যায়নি।' : 'No devices registered yet.'}
+        {/* Google Drive / Cloud Hybrid Backup Toggle Strip */}
+        <div className="mx-5 mt-3 p-3 bg-slate-950/90 rounded-xl border border-indigo-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-inner">
+          <div className="flex items-start sm:items-center gap-2.5">
+            <div className={`w-3.5 h-3.5 rounded-full shrink-0 mt-0.5 sm:mt-0 ${isDriveBackupEnabled ? 'bg-indigo-400 animate-pulse' : 'bg-emerald-500'}`} />
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-bold text-white">
+                  {isBn ? 'গুগল ড্রাইভ / ক্লাউড ব্যাকআপ সিঙ্ক (ঐচ্ছিক ব্যাকআপ)' : 'Google Drive / Cloud Backup (Optional Sync)'}
+                </span>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                  isDriveBackupEnabled 
+                    ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40' 
+                    : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                }`}>
+                  {isDriveBackupEnabled 
+                    ? (isBn ? 'ড্রাইভ সিঙ্ক সক্রিয় (ON)' : 'Drive Sync Active (ON)') 
+                    : (isBn ? 'সুপাবেজ স্টোরেজ সরাসরি সক্রিয় (গুগল ড্রাইভ অফ)' : 'Supabase Direct Active (Drive OFF)')}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                {isDriveBackupEnabled
+                  ? (isBn ? 'ড্রাইভ ব্যাকআপ চালু: সকল মেমো ও পেন্ডিং ফাইল স্বয়ংক্রিয়ভাবে এডমিন গুগল ড্রাইভে সিঙ্ক হবে।' : 'Drive backup is ON. Syncing pending invoices to Google Drive.')
+                  : (isBn ? 'ডিফল্টভাবে বন্ধ: সকল ইনভয়েস সরাসরি সুপাবেজ ক্লাউড স্টোরেজে জমা হচ্ছে, কোনো পেন্ডিং কিউ বা JSON এরর ছাড়াই।' : 'Default OFF: Invoices upload directly to Supabase Storage with zero queue errors.')}
               </p>
-              <p className="text-xs text-slate-500">
-                {isBn
-                  ? 'মোবাইল বা ল্যাপটপে ক্যাশ কাউন্টার বা ডিএসআর লগইন করলে তা স্বয়ংক্রিয়ভাবে এখানে যুক্ত হবে।'
-                  : 'Devices will auto-register as soon as staff logs in on mobile or laptop.'}
-              </p>
-              <button
-                type="button"
-                onClick={handleRefresh}
-                className="mt-3 px-4 py-2 rounded-xl bg-purple-700 hover:bg-purple-600 text-white font-bold text-xs"
-              >
-                {isBn ? 'সার্ভার থেকে চেক করুন' : 'Check from Server'}
-              </button>
             </div>
-          ) : (
-            allDevices.map((dev) => {
-              const isOnline = Boolean(dev.isOnline);
-              const isDsr = dev.role === 'dsr';
-              const isCounter = dev.role === 'counter';
-              const isAdmin = dev.role === 'admin';
-              const hasPending = (dev.pendingFilesCount || 0) > 0;
-              const isExpanded = expandedDeviceId === dev.deviceId;
+          </div>
 
-              return (
-                <div
-                  key={dev.deviceId}
-                  className={`rounded-2xl border transition-all ${
-                    hasPending
-                      ? 'bg-amber-950/10 border-amber-500/40'
-                      : isOnline
-                      ? 'bg-slate-950/80 border-emerald-500/30'
-                      : 'bg-slate-950/40 border-slate-800'
-                  }`}
-                >
-                  {/* Device Header Row */}
-                  <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div
-                        className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
-                          isAdmin
-                            ? 'bg-purple-950/80 text-purple-400 border-purple-500/40'
-                            : isCounter
-                            ? 'bg-sky-950/80 text-sky-400 border-sky-500/40'
-                            : 'bg-indigo-950/80 text-indigo-400 border-indigo-500/40'
-                        }`}
-                      >
-                        {isAdmin && <Shield className="w-5 h-5" />}
-                        {isCounter && <Laptop className="w-5 h-5" />}
-                        {isDsr && <Smartphone className="w-5 h-5" />}
-                      </div>
+          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+            <span className="text-[11px] font-bold text-slate-300">
+              {isDriveBackupEnabled ? (isBn ? 'চালু' : 'ON') : (isBn ? 'বন্ধ' : 'OFF')}
+            </span>
+            <button
+              type="button"
+              onClick={() => toggleDriveBackup()}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                isDriveBackupEnabled ? 'bg-indigo-600' : 'bg-slate-700'
+              }`}
+              role="switch"
+              aria-checked={isDriveBackupEnabled}
+              title="গুগল ড্রাইভ ব্যাকআপ টগল"
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
+                  isDriveBackupEnabled ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+        </div>
 
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="font-bold text-sm text-white truncate">
-                            {dev.name || (isAdmin ? 'এডমিন মাতৃছায়া' : isCounter ? 'ক্যাশ কাউন্টার' : 'রাজু আলম (ডিএসআর)')}
-                          </span>
-                          <span
-                            className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
-                              isAdmin
-                                ? 'bg-purple-900/60 text-purple-300'
-                                : isCounter
-                                ? 'bg-sky-900/60 text-sky-300'
-                                : 'bg-indigo-900/60 text-indigo-300'
-                            }`}
-                          >
-                            {dev.role}
-                          </span>
-                          {hasPending && (
-                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1">
-                              <span>⚠️</span>
-                              <span>{dev.pendingFilesCount} {isBn ? 'টি পেন্ডিং ফাইল' : 'Pending Files'}</span>
-                            </span>
-                          )}
-                        </div>
+        {/* Roles Fleet Cards (Grouped solely by User Role Identity) */}
+        <div className="p-5 flex-1 overflow-y-auto space-y-3">
+          <div className="flex items-center justify-between text-xs text-slate-400 pb-1">
+            <span className="font-semibold text-slate-300">
+              {isBn ? 'রোল ভিত্তিক একক লাইভ উপস্থিতি (Single Status View per Role):' : 'Unified Live Presence by Role Identity:'}
+            </span>
+            <span className="font-mono text-[11px] text-emerald-400">
+              4/4 {isBn ? 'রোল সক্রিয় ট্র্যাকিং' : 'Roles Tracked'}
+            </span>
+          </div>
 
-                        <p className="text-xs text-slate-400 flex items-center gap-2 mt-0.5 font-mono">
-                          <span>📞 {dev.phone || 'N/A'}</span>
-                          <span className="text-slate-600">•</span>
-                          <span>{dev.deviceType || 'ডিভাইস'}</span>
-                          {dev.deviceId && (
-                            <>
-                              <span className="text-slate-600">•</span>
-                              <span className="text-[10px] text-slate-500 truncate max-w-[130px]" title={dev.deviceId}>
-                                ID: {dev.deviceId.slice(0, 12)}...
-                              </span>
-                            </>
-                          )}
-                        </p>
-                      </div>
+          {roleCards.map((card) => {
+            const isOnline = Boolean(card.isOnline);
+            const isDsr = card.roleKey === 'dsr';
+            const isCounter = card.roleKey === 'counter';
+            const isAdmin = card.roleKey === 'admin';
+            const isRetailer = card.roleKey === 'retailer';
+            const hasPending = card.pendingFilesCount > 0;
+            const isExpanded = expandedDeviceId === card.primaryDeviceId;
+
+            return (
+              <div
+                key={card.roleKey}
+                className={`rounded-2xl border transition-all ${
+                  hasPending
+                    ? 'bg-amber-950/15 border-amber-500/40'
+                    : isOnline
+                    ? 'bg-slate-950/80 border-emerald-500/40 shadow-sm shadow-emerald-950/30'
+                    : 'bg-slate-950/40 border-slate-800'
+                }`}
+              >
+                {/* Role Header Row */}
+                <div className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div
+                      className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 border ${
+                        isAdmin
+                          ? 'bg-purple-950/80 text-purple-400 border-purple-500/40'
+                          : isCounter
+                          ? 'bg-sky-950/80 text-sky-400 border-sky-500/40'
+                          : isDsr
+                          ? 'bg-indigo-950/80 text-indigo-400 border-indigo-500/40'
+                          : 'bg-teal-950/80 text-teal-400 border-teal-500/40'
+                      }`}
+                    >
+                      {isAdmin && <Shield className="w-5 h-5" />}
+                      {isCounter && <Laptop className="w-5 h-5" />}
+                      {isDsr && <Smartphone className="w-5 h-5" />}
+                      {isRetailer && <Store className="w-5 h-5" />}
                     </div>
 
-                    {/* Status & Action Buttons */}
-                    <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0">
-                      <div className="text-right">
-                        <div className="flex items-center gap-1.5 justify-end">
-                          <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-emerald-400 animate-ping' : 'bg-slate-500'}`} />
-                          <span
-                            className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${
-                              isOnline
-                                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                                : 'bg-slate-800 text-slate-400 border-slate-700'
-                            }`}
-                          >
-                            {isOnline ? (isBn ? 'অনলাইন' : 'Online') : (isBn ? 'অফলাইন' : 'Offline')}
-                          </span>
-                        </div>
-                        <span className="text-[10px] text-slate-400 block mt-0.5">
-                          {isOnline ? (isBn ? 'এখন সক্রিয়' : 'Active Now') : (isBn ? 'শেষ দেখা: ' + (dev.lastSeenAt ? new Date(dev.lastSeenAt).toLocaleTimeString('bn-BD') : 'পূর্বে') : 'Last seen: ' + (dev.lastSeenAt || 'N/A'))}
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold text-sm text-white truncate">
+                          {card.name}
                         </span>
+                        <span
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
+                            isAdmin
+                              ? 'bg-purple-900/60 text-purple-300'
+                              : isCounter
+                              ? 'bg-sky-900/60 text-sky-300'
+                              : isDsr
+                              ? 'bg-indigo-900/60 text-indigo-300'
+                              : 'bg-teal-900/60 text-teal-300'
+                          }`}
+                        >
+                          {card.roleKey}
+                        </span>
+
+                        {hasPending ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1">
+                            <span>⚠️</span>
+                            <span>{card.pendingFilesCount} {isBn ? 'টি পেন্ডিং ফাইল' : 'Pending Files'}</span>
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+                            <Check className="w-3 h-3 text-emerald-400" />
+                            <span>{isBn ? 'জিরো পেন্ডিং (সিঙ্কড)' : 'Zero Pending'}</span>
+                          </span>
+                        )}
                       </div>
 
-                      {hasPending && (
-                        <div className="flex items-center gap-1.5">
+                      <p className="text-xs text-slate-400 flex items-center gap-2 mt-0.5 font-mono flex-wrap">
+                        <span>📞 {card.phone}</span>
+                        <span className="text-slate-600">•</span>
+                        <span>{card.desc}</span>
+                        <span className="text-slate-600">•</span>
+                        <span className="text-[10px] text-slate-500 font-mono">
+                          ID: role_{card.roleKey}
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Status & Action Buttons */}
+                  <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
+                    <div className="text-right">
+                      <div className="flex items-center gap-1.5 justify-end">
+                        <span className={`w-2.5 h-2.5 rounded-full ${isOnline ? 'bg-emerald-400 animate-ping' : 'bg-slate-600'}`} />
+                        <span
+                          className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${
+                            isOnline
+                              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                              : 'bg-slate-800 text-slate-400 border-slate-700'
+                          }`}
+                        >
+                          {isOnline ? (isBn ? 'অনলাইন' : 'Online') : (isBn ? 'অফলাইন' : 'Offline')}
+                        </span>
+                      </div>
+                      <span className="text-[11px] font-mono text-emerald-300 font-bold block mt-1">
+                        {card.formattedActive}
+                      </span>
+                    </div>
+
+                    {hasPending && (
+                      <div className="flex items-center gap-1.5">
+                        {isDriveBackupEnabled && (
                           <button
                             type="button"
-                            onClick={() => handleUploadPending(dev.deviceId, dev.name)}
+                            onClick={() => handleUploadPending(card.primaryDeviceId, card.name)}
                             disabled={isProcessing}
                             className="px-2.5 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1 transition active:scale-95 cursor-pointer shadow-sm"
-                            title={isBn ? 'পেন্ডিং ফাইলগুলো সরাসরি এডমিন গুগল ড্রাইভে আপলোড ও সাইন করুন' : 'Sign and Upload to Google Drive'}
+                            title={isBn ? 'পেন্ডিং ফাইলগুলো গুগল ড্রাইভে আপলোড করুন' : 'Sign and Upload to Google Drive'}
                           >
                             <UploadCloud className="w-3.5 h-3.5" />
                             <span>{isBn ? 'ড্রাইভে সাইন' : 'Sign to Drive'}</span>
                           </button>
+                        )}
 
-                          <button
-                            type="button"
-                            onClick={() => handleClearToBackup(dev.deviceId, dev.name)}
-                            disabled={isProcessing}
-                            className="px-2.5 py-1.5 rounded-xl bg-amber-700 hover:bg-amber-600 text-white font-bold text-xs flex items-center gap-1 transition active:scale-95 cursor-pointer shadow-sm"
-                            title={isBn ? 'ক্লিয়ার করে ব্যাকআপে সংরক্ষণ করুন' : 'Clear to Backup'}
-                          >
-                            <FileDown className="w-3.5 h-3.5" />
-                            <span>{isBn ? 'ক্লিয়ার ব্যাকআপ' : 'Clear Backup'}</span>
-                          </button>
-                        </div>
-                      )}
-
-                      {dev.pendingItems && dev.pendingItems.length > 0 && (
                         <button
                           type="button"
-                          onClick={() => setExpandedDeviceId(isExpanded ? null : dev.deviceId)}
-                          className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
-                          title={isBn ? 'পেন্ডিং ফাইলের বিস্তারিত দেখুন' : 'Toggle details'}
+                          onClick={() => handleClearToBackup(card.primaryDeviceId, card.name)}
+                          disabled={isProcessing}
+                          className="px-2.5 py-1.5 rounded-xl bg-amber-700 hover:bg-amber-600 text-white font-bold text-xs flex items-center gap-1 transition active:scale-95 cursor-pointer shadow-sm"
+                          title={isBn ? 'ক্লিয়ার করে ব্যাকআপে সংরক্ষণ করুন' : 'Clear to Backup'}
                         >
-                          {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                          <FileDown className="w-3.5 h-3.5" />
+                          <span>{isBn ? 'ক্লিয়ার ব্যাকআপ' : 'Clear'}</span>
                         </button>
-                      )}
+                      </div>
+                    )}
+
+                    {card.pendingItems && card.pendingItems.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setExpandedDeviceId(isExpanded ? null : card.primaryDeviceId)}
+                        className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition cursor-pointer"
+                        title={isBn ? 'পেন্ডিং ফাইলের বিস্তারিত দেখুন' : 'Toggle details'}
+                      >
+                        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Expanded Pending Items List */}
+                {isExpanded && card.pendingItems && card.pendingItems.length > 0 && (
+                  <div className="px-4 pb-4 pt-1 border-t border-slate-800/80 bg-slate-900/60 rounded-b-2xl">
+                    <h4 className="text-xs font-bold text-amber-300 mb-2 flex items-center gap-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                      <span>{isBn ? 'এই রোলের পেন্ডিং অফলাইন ফাইল তালিকা:' : 'Pending offline queue for this role:'}</span>
+                    </h4>
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                      {card.pendingItems.map((item: any, idx: number) => (
+                        <div
+                          key={item.id || idx}
+                          className="p-2 rounded-xl bg-slate-950/90 border border-slate-800 flex items-center justify-between text-xs"
+                        >
+                          <div className="min-w-0">
+                            <span className="font-bold text-slate-200 block truncate">
+                              {item.title || item.entityType || 'অফলাইন রেকর্ড'}
+                            </span>
+                            <span className="text-[10px] text-slate-400">
+                              {item.party ? `${item.party} • ` : ''}
+                              {item.timestamp ? new Date(item.timestamp).toLocaleString('bn-BD') : ''}
+                            </span>
+                          </div>
+                          {item.amount > 0 && (
+                            <span className="font-bold font-mono text-emerald-400 shrink-0">
+                              {formatCurrency(item.amount, language)}
+                            </span>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   </div>
-
-                  {/* Expanded Pending Items List */}
-                  {isExpanded && dev.pendingItems && dev.pendingItems.length > 0 && (
-                    <div className="px-4 pb-4 pt-1 border-t border-slate-800/80 bg-slate-900/60 rounded-b-2xl">
-                      <h4 className="text-xs font-bold text-amber-300 mb-2 flex items-center gap-1.5">
-                        <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
-                        <span>{isBn ? 'এই ডিভাইসের পেন্ডিং অফলাইন ফাইল তালিকা:' : 'Pending offline queue on this device:'}</span>
-                      </h4>
-                      <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-                        {dev.pendingItems.map((item: any, idx: number) => (
-                          <div
-                            key={item.id || idx}
-                            className="p-2 rounded-xl bg-slate-950/90 border border-slate-800 flex items-center justify-between text-xs"
-                          >
-                            <div className="min-w-0">
-                              <span className="font-bold text-slate-200 block truncate">
-                                {item.title || item.entityType || 'অফলাইন রেকর্ড'}
-                              </span>
-                              <span className="text-[10px] text-slate-400">
-                                {item.party ? `${item.party} • ` : ''}
-                                {item.timestamp ? new Date(item.timestamp).toLocaleString('bn-BD') : ''}
-                              </span>
-                            </div>
-                            {item.amount > 0 && (
-                              <span className="font-bold font-mono text-emerald-400 shrink-0">
-                                {formatCurrency(item.amount, language)}
-                              </span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })
-          )}
+                )}
+              </div>
+            );
+          })}
         </div>
 
         {/* Footer */}
