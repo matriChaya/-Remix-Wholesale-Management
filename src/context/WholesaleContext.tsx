@@ -1904,14 +1904,22 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   };
 
   const drainPendingFilesNow = async (): Promise<number> => {
-    return await drainLocalPendingQueue();
+    try {
+      const { dualCloudDrainAllPendingQueues } = await import('../services/dualCloudStorageService');
+      const res = await dualCloudDrainAllPendingQueues();
+      return res.drainedCount;
+    } catch {
+      return await drainLocalPendingQueue();
+    }
   };
 
-  // Background silent auto-drain every 20 seconds (Guarantees zero pending files)
+  // Background silent auto-drain every 20 seconds (Guarantees zero pending files across dual-cloud)
   useEffect(() => {
     const timer = setInterval(() => {
       if (typeof navigator !== 'undefined' && navigator.onLine) {
-        drainLocalPendingQueue().catch(() => {});
+        import('../services/dualCloudStorageService')
+          .then(({ dualCloudDrainAllPendingQueues }) => dualCloudDrainAllPendingQueues().catch(() => {}))
+          .catch(() => drainLocalPendingQueue().catch(() => {}));
       }
     }, 20000);
     return () => clearInterval(timer);
@@ -3354,39 +3362,31 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     }
   }, [isDriveBackupEnabled]);
 
-  // 3. Retrieve previous accounts and archives from Cloud & Google Drive
+  // 3. Retrieve previous accounts and archives from Combined Dual Cloud (Supabase Storage + Google Drive + Server Cloud)
   const retrievePastAccountsFromCloudOrDrive = useCallback(async (): Promise<{ success: boolean; message: string; pastBackups: any[] }> => {
     try {
-      const { fetchArchivedPastBackups } = await import('../services/googleDriveService');
-      const driveArchives = await fetchArchivedPastBackups().catch(() => []);
+      const { fetchCombinedBackupHistory } = await import('../services/dualCloudStorageService');
+      const combinedRecords = await fetchCombinedBackupHistory().catch(() => []);
 
-      const combined = [
-        ...driveArchives.map((b) => ({
-          id: b.id,
-          name: b.name,
-          source: 'Google Drive (Tier 2)',
-          date: b.createdTime || b.modifiedTime,
-          summary: b.summaryText || b.name,
-          webViewLink: b.webViewLink,
-        })),
-        ...(backupHistory || []).map((bh) => ({
-          id: bh.id,
-          name: `Firestore Archive - ${bh.id}`,
-          source: 'Cloud Account (Tier 3)',
-          date: bh.timestamp,
-          summary: `${bh.totalRecords}টি রেকর্ড • ${bh.financialSummary || ''}`,
-        })),
-      ];
+      const formattedList = combinedRecords.map((r) => ({
+        id: r.id,
+        name: r.name,
+        source: r.source,
+        date: r.date,
+        formattedDate: r.formattedDate,
+        summary: `${r.source} • ${r.size || ''} ${r.recordCount ? `• ${r.recordCount}টি রেকর্ড` : ''}`,
+        webViewLink: r.publicUrl,
+      }));
 
       return {
         success: true,
-        message: `মোট ${combined.length}টি সংরক্ষিত পূর্বের হিসাব ও আর্কাইভ পাওয়া গেছে।`,
-        pastBackups: combined,
+        message: `মোট ${formattedList.length}টি সংরক্ষিত পূর্বের হিসাব ও ক্লাউড আর্কাইভ পাওয়া গেছে (সুপাবেজ স্টোরেজ ও গুগল ড্রাইভ সমন্বিত)।`,
+        pastBackups: formattedList,
       };
     } catch (err: any) {
       return { success: false, message: err.message || 'পূর্বের হিসাব সংগ্রহ ব্যর্থ হয়েছে।', pastBackups: [] };
     }
-  }, [backupHistory]);
+  }, []);
 
 
   // Automatic Google Drive auto-sync on online & periodic timer
@@ -9640,7 +9640,8 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
   const refreshRegisteredDevices = useCallback(async () => {
     try {
       const res = await fetch('/api/device/list?adminPhone=01937200635');
-      const json = await res.json();
+      const text = await res.text();
+      const json = text ? JSON.parse(text) : {};
       if (json.success && Array.isArray(json.devices)) {
         setRegisteredDevices(json.devices);
       }
@@ -9671,7 +9672,8 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ deviceId }),
       });
-      const json = await res.json();
+      const text = await res.text();
+      const json = text ? JSON.parse(text) : {};
       if (json.success) {
         setRemotePendingDevices((prev) => prev.filter((d) => d.deviceId !== deviceId));
         return { success: true, message: json.message };
@@ -9769,7 +9771,8 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       // 2. Poll server presence status to know if remote devices are online
       try {
         const statusRes = await fetch('/api/presence/status?adminPhone=01937200635');
-        const statusJson = await statusRes.json();
+        const statusText = await statusRes.text();
+        const statusJson = statusText ? JSON.parse(statusText) : {};
         if (statusJson.success && Array.isArray(statusJson.devices)) {
           setRemoteServerDevices(statusJson.devices);
           setRegisteredDevices(statusJson.devices);
@@ -9780,7 +9783,8 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       if (currentRole === 'admin') {
         try {
           const pendingRes = await fetch('/api/device/pending-sync/all?adminPhone=01937200635');
-          const pendingJson = await pendingRes.json();
+          const pendingText = await pendingRes.text();
+          const pendingJson = pendingText ? JSON.parse(pendingText) : {};
           if (pendingJson.success && Array.isArray(pendingJson.devices)) {
             setRemotePendingDevices(pendingJson.devices);
           }

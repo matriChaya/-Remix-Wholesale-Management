@@ -46,7 +46,8 @@ export const fetchServerVersion = async (): Promise<AppVersionData | null> => {
       },
     });
     if (!res.ok) return null;
-    const data = await res.json();
+    const text = await res.text();
+    const data = text ? JSON.parse(text) : {};
     if (data.success) {
       return data;
     }

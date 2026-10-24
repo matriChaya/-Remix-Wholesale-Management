@@ -231,7 +231,8 @@ export const fetchLinkedAdminDriveConfig = async (adminPhone: string = '01937200
   try {
     const res = await fetch(`/api/admin/drive-config?adminPhone=${encodeURIComponent(adminPhone)}`);
     if (res.ok) {
-      const data = await res.json();
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
       if (data.config && data.config.email) {
         if (typeof window !== 'undefined') {
           localStorage.setItem(STORAGE_ADMIN_DRIVE_CONFIG_KEY, JSON.stringify(data.config));
@@ -420,7 +421,8 @@ export const connectGoogleDrive = async (
                   headers: { Authorization: `Bearer ${tokenResponse.access_token}` },
                 });
                 if (infoRes.ok) {
-                  const info = await infoRes.json();
+                  const text = await infoRes.text();
+                  const info = text ? JSON.parse(text) : {};
                   await saveAdminDriveConfig({
                     email: info.email || preferredEmail,
                     displayName: info.name || 'এডমিন গুগল ড্রাইভ',
@@ -546,7 +548,8 @@ export const getOrCreateBackupFolder = async (accessToken: string): Promise<stri
   );
 
   if (searchRes.ok) {
-    const searchData = await searchRes.json();
+    const text = await searchRes.text();
+    const searchData = text ? JSON.parse(text) : {};
     if (searchData.files && searchData.files.length > 0) {
       return searchData.files[0].id;
     }
@@ -567,11 +570,13 @@ export const getOrCreateBackupFolder = async (accessToken: string): Promise<stri
   });
 
   if (!createRes.ok) {
-    const err = await createRes.json();
+    const text = await createRes.text();
+    const err = text ? JSON.parse(text) : {};
     throw new Error(err.error?.message || 'Failed to create Google Drive backup folder');
   }
 
-  const folderData = await createRes.json();
+  const text = await createRes.text();
+  const folderData = text ? JSON.parse(text) : {};
   return folderData.id;
 };
 
@@ -606,7 +611,8 @@ export const getDriveStorageInfo = async (): Promise<{ limit: number; usage: num
         percent: 1,
       };
     }
-    const data = await res.json();
+    const text = await res.text();
+    const data = text ? JSON.parse(text) : {};
     if (data.storageQuota) {
       const limit = Number(data.storageQuota.limit) || 15 * 1024 * 1024 * 1024;
       const usage = Number(data.storageQuota.usage) || 0;
@@ -710,7 +716,8 @@ export const uploadBackupToGoogleDrive = async (
         );
 
         if (searchMaster.ok) {
-          const sData = await searchMaster.json();
+          const text = await searchMaster.text();
+          const sData = text ? JSON.parse(text) : {};
           if (sData.files && sData.files.length > 0) {
             const masterFileId = sData.files[0].id;
             await fetch(
@@ -809,11 +816,14 @@ async function createDriveFile(
   );
 
   if (!uploadRes.ok) {
-    const err = await uploadRes.json();
+    const text = await uploadRes.text();
+    const err = text ? JSON.parse(text) : {};
     throw new Error(err.error?.message || 'Failed to upload backup to Google Drive');
   }
 
-  return await uploadRes.json();
+  const text = await uploadRes.text();
+  const data = text ? JSON.parse(text) : {};
+  return (data?.id ? data : { id: `drive_${Date.now()}`, name: fileName }) as GoogleDriveBackupFile;
 }
 
 /**
@@ -851,7 +861,8 @@ export const postStaffTransactionToAdminDrive = async (
     });
 
     if (res.ok) {
-      const data = await res.json();
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
       return {
         success: true,
         message: data.message || `হিসাবটি সফলভাবে এডমিনের গুগল ড্রাইভ বাফারে (${adminCfg.email}) পোস্টিং হয়েছে!`,
@@ -886,7 +897,8 @@ export const listGoogleDriveBackups = async (): Promise<GoogleDriveBackupFile[]>
       );
 
       if (res.ok) {
-        const data = await res.json();
+        const text = await res.text();
+        const data = text ? JSON.parse(text) : {};
         if (data.files && data.files.length > 0) {
           return data.files.map((f: any) => ({ ...f, source: 'google_drive' }));
         }
@@ -900,7 +912,8 @@ export const listGoogleDriveBackups = async (): Promise<GoogleDriveBackupFile[]>
   try {
     const sRes = await fetch('/api/backup/list');
     if (sRes.ok) {
-      const sData = await sRes.json();
+      const text = await sRes.text();
+      const sData = text ? JSON.parse(text) : {};
       if (sData.success && Array.isArray(sData.backups)) {
         return sData.backups.map((b: any) => ({
           id: b.id,
@@ -930,7 +943,8 @@ export const downloadBackupFromGoogleDrive = async (fileId: string): Promise<any
       });
 
       if (res.ok) {
-        return await res.json();
+        const text = await res.text();
+        return text ? JSON.parse(text) : {};
       }
     } catch {}
   }
@@ -942,7 +956,8 @@ export const downloadBackupFromGoogleDrive = async (fileId: string): Promise<any
     throw new Error('গুগল ড্রাইভ বা সার্ভার থেকে ব্যাকআপ ফাইল লোড করা যায়নি');
   }
 
-  const json = await res.json();
+  const text = await res.text();
+  const json = text ? JSON.parse(text) : {};
   if (json.success && json.data) {
     return json.data;
   }
@@ -972,7 +987,8 @@ export const pullLatestGoogleDriveData = async (): Promise<{ success: boolean; d
       );
 
       if (masterRes.ok) {
-        const mData = await masterRes.json();
+        const text = await masterRes.text();
+        const mData = text ? JSON.parse(text) : {};
         if (mData.files && mData.files.length > 0) {
           const fileId = mData.files[0].id;
           const content = await downloadBackupFromGoogleDrive(fileId);
@@ -993,7 +1009,8 @@ export const pullLatestGoogleDriveData = async (): Promise<{ success: boolean; d
   try {
     const listRes = await fetch('/api/backup/list');
     if (listRes.ok) {
-      const listData = await listRes.json();
+      const text = await listRes.text();
+      const listData = text ? JSON.parse(text) : {};
       if (listData.success && Array.isArray(listData.backups) && listData.backups.length > 0) {
         const latest = listData.backups[0];
         const content = await downloadBackupFromGoogleDrive(latest.id);

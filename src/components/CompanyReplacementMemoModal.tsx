@@ -244,7 +244,8 @@ export const CompanyReplacementMemoModal: React.FC<CompanyReplacementMemoModalPr
         }),
       });
 
-      const json = await res.json();
+      const text = await res.text();
+      const json = text ? JSON.parse(text) : {};
       if (!res.ok || !json.success) {
         throw new Error(json.error || 'স্ক্যান করতে ব্যর্থ হয়েছে');
       }

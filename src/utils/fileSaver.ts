@@ -205,7 +205,8 @@ export const saveFileBlob = async (
       });
 
       if (resp.ok) {
-        const data = await resp.json();
+        const text = await resp.text();
+        const data = text ? JSON.parse(text) : {};
         if (data.success && data.downloadUrl) {
           // Trigger the download via HTTPS link
           const link = document.createElement('a');

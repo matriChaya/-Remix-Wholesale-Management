@@ -44,6 +44,11 @@ import {
   GoogleDriveAuthState,
   GoogleDriveBackupFile,
 } from '../services/googleDriveService';
+import {
+  fetchCombinedBackupHistory,
+  downloadAndRestoreUniversalBackup,
+  UnifiedBackupRecord,
+} from '../services/dualCloudStorageService';
 
 export const BackupSyncModal: React.FC = () => {
   const {
@@ -94,6 +99,7 @@ export const BackupSyncModal: React.FC = () => {
   const [isPullingGDrive, setIsPullingGDrive] = useState<boolean>(false);
   const [restoreConfirmId, setRestoreConfirmId] = useState<string | null>(null);
   const [serverBackups, setServerBackups] = useState<any[]>([]);
+  const [combinedBackups, setCombinedBackups] = useState<UnifiedBackupRecord[]>([]);
   const [isLoadingServerBackups, setIsLoadingServerBackups] = useState<boolean>(false);
 
   // Google Drive Integration States
@@ -151,19 +157,31 @@ export const BackupSyncModal: React.FC = () => {
     return () => unsub();
   }, [isBackupModalOpen]);
 
-  // Fetch server backup list on open
+  // Load combined backup history (Supabase Storage + Google Drive + Server Cloud)
+  const loadAllCombinedBackups = async () => {
+    setIsLoadingServerBackups(true);
+    try {
+      const records = await fetchCombinedBackupHistory().catch(() => []);
+      if (Array.isArray(records) && records.length > 0) {
+        setCombinedBackups(records);
+      }
+      const res = await fetch('/api/backup/list');
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
+      if (data.success && Array.isArray(data.backups)) {
+        setServerBackups(data.backups);
+      }
+    } catch (err) {
+      console.warn('Fetch combined backup history note:', err);
+    } finally {
+      setIsLoadingServerBackups(false);
+    }
+  };
+
+  // Fetch combined and server backup list on open
   useEffect(() => {
     if (isBackupModalOpen && isOnline && !isSimulatedOffline) {
-      setIsLoadingServerBackups(true);
-      fetch('/api/backup/list')
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.success && Array.isArray(data.backups)) {
-            setServerBackups(data.backups);
-          }
-        })
-        .catch((err) => console.warn('Fetch server backups note:', err))
-        .finally(() => setIsLoadingServerBackups(false));
+      loadAllCombinedBackups();
     }
   }, [isBackupModalOpen, isOnline, isSimulatedOffline]);
 
@@ -195,15 +213,8 @@ export const BackupSyncModal: React.FC = () => {
                 ? `সফলভাবে ক্লাউডে সিঙ্ক ও স্বয়ংক্রিয় ব্যাকআপ সম্পন্ন হয়েছে! (${result.syncedCount}টি আইটেম আপলোড)`
                 : `Synced successfully! (${result.syncedCount} items saved to cloud).`,
           });
-          // Refresh server backup list
-          fetch('/api/backup/list')
-            .then((res) => res.json())
-            .then((data) => {
-              if (data.success && Array.isArray(data.backups)) {
-                setServerBackups(data.backups);
-              }
-            })
-            .catch(() => {});
+          // Refresh server and combined backup list
+          loadAllCombinedBackups().catch(() => {});
           return;
         } else {
           lastError = result.message || 'Network unreachable';
@@ -281,7 +292,8 @@ export const BackupSyncModal: React.FC = () => {
     setRestoreConfirmId(null);
     try {
       const res = await fetch(`/api/backup/get/${backupId}`);
-      const json = await res.json();
+      const text = await res.text();
+      const json = text ? JSON.parse(text) : {};
       if (json.success && json.data) {
         const restoreRes = await restoreFromBackupSnapshot(json.data);
         if (restoreRes.success) {
@@ -300,6 +312,37 @@ export const BackupSyncModal: React.FC = () => {
         }
       } else {
         throw new Error(json.error || 'Could not load backup');
+      }
+    } catch (err: any) {
+      setSyncStatusMsg({
+        type: 'error',
+        text: err.message || 'Restore error',
+      });
+    } finally {
+      setIsRestoring(false);
+    }
+  };
+
+  const handleRestoreBackupRecord = async (record: UnifiedBackupRecord) => {
+    setIsRestoring(true);
+    setRestoreConfirmId(null);
+    try {
+      const res = await downloadAndRestoreUniversalBackup(record, async (payload) => {
+        return await restoreFromBackupSnapshot(payload);
+      });
+      if (res.success) {
+        setSyncStatusMsg({
+          type: 'success',
+          text:
+            language === 'bn'
+              ? `সফলভাবে ${record.source} (${record.name}) থেকে ডেটা রিস্টোর সম্পন্ন হয়েছে!`
+              : `Successfully restored data from ${record.source} (${record.name})!`,
+        });
+      } else {
+        setSyncStatusMsg({
+          type: 'error',
+          text: res.message || 'Restore error',
+        });
       }
     } catch (err: any) {
       setSyncStatusMsg({
@@ -1474,7 +1517,9 @@ export const BackupSyncModal: React.FC = () => {
                 <span>{language === 'bn' ? 'সাম্প্রতিক ক্লাউড ব্যাকআপ হিস্ট্রি' : 'Recent Cloud Backup Snapshots'}</span>
               </h4>
               <span className="text-[11px] text-slate-500">
-                {serverBackups.length > 0
+                {combinedBackups.length > 0
+                  ? `${combinedBackups.length} ${language === 'bn' ? 'টি সমন্বিত ব্যাকআপ উপলব্ধ (সুপাবেজ ও ড্রাইভ)' : 'dual-cloud backups available'}`
+                  : serverBackups.length > 0
                   ? `${serverBackups.length} ${language === 'bn' ? 'টি ব্যাকআপ উপলব্ধ' : 'backups available'}`
                   : backupHistory.length > 0
                   ? `${backupHistory.length} ${language === 'bn' ? 'টি লোকাল রেকর্ড' : 'local records'}`
@@ -1488,7 +1533,7 @@ export const BackupSyncModal: React.FC = () => {
                   <RefreshCw className="w-4 h-4 animate-spin text-sky-400" />
                   <span>{language === 'bn' ? 'ব্যাকআপ তালিকা লোড হচ্ছে...' : 'Loading backup history...'}</span>
                 </div>
-              ) : (serverBackups.length > 0 ? serverBackups : backupHistory).length === 0 ? (
+              ) : (combinedBackups.length > 0 ? combinedBackups : (serverBackups.length > 0 ? serverBackups : backupHistory)).length === 0 ? (
                 <div className="p-5 text-center text-xs text-slate-500 space-y-1">
                   <HardDrive className="w-6 h-6 mx-auto text-slate-600 mb-1" />
                   <p>{language === 'bn' ? 'এখনও কোনো ব্যাকআপ জমা করা হয়নি।' : 'No backup snapshots found.'}</p>
@@ -1499,69 +1544,114 @@ export const BackupSyncModal: React.FC = () => {
                   </p>
                 </div>
               ) : (
-                (serverBackups.length > 0 ? serverBackups : backupHistory).slice(0, 8).map((item: any, idx: number) => (
-                  <div
-                    key={item.id || idx}
-                    className="p-3 hover:bg-slate-900/60 transition flex items-center justify-between gap-3 text-xs"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-slate-200">
-                          {formatTimestamp(item.timestamp)}
-                        </span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-sky-950 text-sky-300 border border-sky-800/60">
-                          {item.source || 'auto-cloud'}
-                        </span>
-                      </div>
-                      <div className="text-[11px] text-slate-400 mt-0.5 truncate flex items-center gap-2">
-                        <span>{language === 'bn' ? 'মোট রেকর্ড:' : 'Records:'} {item.totalRecords || 0}</span>
-                        <span>•</span>
-                        <span className="text-emerald-400 font-mono">{item.financialSummary || ''}</span>
-                      </div>
-                    </div>
+                (combinedBackups.length > 0 ? combinedBackups : (serverBackups.length > 0 ? serverBackups : backupHistory)).slice(0, 10).map((item: any, idx: number) => {
+                  const isUnified = !!item.storageProvider;
+                  const itemTitle = item.name || item.fileName || `Backup Snapshot #${idx + 1}`;
+                  const itemDate = item.formattedDate || formatTimestamp(item.date || item.timestamp);
+                  const isDual = item.source === 'Dual Cloud';
+                  const isSupabase = item.source === 'Supabase Storage';
+                  const isDrive = item.source === 'Google Drive';
 
-                    {/* Action */}
-                    <div className="flex items-center gap-1.5">
-                      <a
-                        href="/api/backup/download"
-                        download={item.fileName || "matrichaya_telecom_erp_backup.json"}
-                        className="px-2.5 py-1.5 bg-sky-950/80 hover:bg-sky-900 text-sky-300 hover:text-white rounded-lg text-xs font-semibold border border-sky-800/80 transition flex items-center gap-1"
-                        title={language === 'bn' ? 'JSON ফাইল ডাউনলোড করুন' : 'Download JSON file'}
-                      >
-                        <Download className="w-3 h-3 text-sky-400" />
-                        <span>{language === 'bn' ? 'ডাউনলোড' : 'JSON'}</span>
-                      </a>
-
-                      {restoreConfirmId === item.id ? (
-                        <div className="flex items-center gap-1.5 animate-in fade-in">
-                          <button
-                            onClick={() => handleRestoreServerBackup(item.id)}
-                            disabled={isRestoring}
-                            className="px-2.5 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-[11px] font-bold transition disabled:opacity-50"
+                  return (
+                    <div
+                      key={item.id || idx}
+                      className="p-3 hover:bg-slate-900/60 transition flex items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-semibold text-slate-200 truncate max-w-xs block">
+                            {itemTitle}
+                          </span>
+                          <span
+                            className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
+                              isDual
+                                ? 'bg-amber-950/80 text-amber-300 border border-amber-600/40 font-bold'
+                                : isSupabase
+                                ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/60'
+                                : isDrive
+                                ? 'bg-indigo-950 text-indigo-300 border border-indigo-800/60'
+                                : 'bg-sky-950 text-sky-300 border border-sky-800/60'
+                            }`}
                           >
-                            {isRestoring
-                              ? (language === 'bn' ? 'রিস্টোর হচ্ছে...' : 'Restoring...')
-                              : (language === 'bn' ? 'হ্যাঁ, রিস্টোর' : 'Confirm')}
-                          </button>
-                          <button
-                            onClick={() => setRestoreConfirmId(null)}
-                            className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[11px]"
-                          >
-                            ✕
-                          </button>
+                            {isDual ? '✨ Dual Cloud' : isSupabase ? '⚡ Supabase Storage' : isDrive ? '📁 Google Drive' : '☁️ Server Cloud'}
+                          </span>
                         </div>
-                      ) : (
-                        <button
-                          onClick={() => setRestoreConfirmId(item.id)}
-                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-semibold border border-slate-700 transition flex items-center gap-1"
-                        >
-                          <RotateLeftIcon />
-                          <span>{language === 'bn' ? 'রিস্টোর' : 'Restore'}</span>
-                        </button>
-                      )}
+                        <div className="text-[11px] text-slate-400 mt-0.5 truncate flex items-center gap-2">
+                          <span>{itemDate}</span>
+                          {item.size && <span>• <span className="font-mono text-slate-300">{item.size}</span></span>}
+                          {item.recordCount ? (
+                            <span>• {item.recordCount} {language === 'bn' ? 'রেকর্ড' : 'records'}</span>
+                          ) : item.totalRecords ? (
+                            <span>• {item.totalRecords} {language === 'bn' ? 'রেকর্ড' : 'records'}</span>
+                          ) : null}
+                          {item.financialSummary && (
+                            <span className="text-emerald-400 font-mono hidden sm:inline">• {item.financialSummary}</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Action */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {item.publicUrl ? (
+                          <a
+                            href={item.publicUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-semibold border border-slate-700 transition flex items-center gap-1"
+                            title={language === 'bn' ? 'ফাইল দেখুন' : 'View file'}
+                          >
+                            <ExternalLink className="w-3 h-3 text-slate-400" />
+                            <span>{language === 'bn' ? 'দেখুন' : 'View'}</span>
+                          </a>
+                        ) : (
+                          <a
+                            href="/api/backup/download"
+                            download={item.fileName || "matrichaya_telecom_erp_backup.json"}
+                            className="px-2.5 py-1.5 bg-sky-950/80 hover:bg-sky-900 text-sky-300 hover:text-white rounded-lg text-xs font-semibold border border-sky-800/80 transition flex items-center gap-1"
+                            title={language === 'bn' ? 'JSON ফাইল ডাউনলোড করুন' : 'Download JSON file'}
+                          >
+                            <Download className="w-3 h-3 text-sky-400" />
+                            <span>{language === 'bn' ? 'ডাউনলোড' : 'JSON'}</span>
+                          </a>
+                        )}
+
+                        {restoreConfirmId === item.id ? (
+                          <div className="flex items-center gap-1.5 animate-in fade-in">
+                            <button
+                              onClick={() => {
+                                if (isUnified) {
+                                  handleRestoreBackupRecord(item);
+                                } else {
+                                  handleRestoreServerBackup(item.id);
+                                }
+                              }}
+                              disabled={isRestoring}
+                              className="px-2.5 py-1 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-[11px] font-bold transition disabled:opacity-50"
+                            >
+                              {isRestoring
+                                ? (language === 'bn' ? 'রিস্টোর হচ্ছে...' : 'Restoring...')
+                                : (language === 'bn' ? 'হ্যাঁ, রিস্টোর' : 'Confirm')}
+                            </button>
+                            <button
+                              onClick={() => setRestoreConfirmId(null)}
+                              className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-[11px]"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setRestoreConfirmId(item.id)}
+                            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-lg text-xs font-semibold border border-slate-700 transition flex items-center gap-1"
+                          >
+                            <RotateLeftIcon />
+                            <span>{language === 'bn' ? 'রিস্টোর' : 'Restore'}</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
