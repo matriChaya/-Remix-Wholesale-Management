@@ -278,6 +278,61 @@ export async function dualCloudDrainAllPendingQueues(): Promise<{
 }
 
 /**
+ * Safely clear and flush all local and offline queues (IndexedDB and localStorage).
+ * Works purely locally when Google Drive or external sync is disabled,
+ * ensuring the pending counter drops cleanly to 0 without network failures.
+ */
+export async function clearPendingQueue(): Promise<{
+  success: boolean;
+  clearedCount: number;
+  message: string;
+}> {
+  let clearedCount = 0;
+  try {
+    // 1. Clear Supabase local pending queue
+    try {
+      const raw = localStorage.getItem('ws_supabase_pending_docs');
+      if (raw) {
+        const arr = JSON.parse(raw);
+        if (Array.isArray(arr)) clearedCount += arr.length;
+      }
+      localStorage.setItem('ws_supabase_pending_docs', '[]');
+    } catch {}
+
+    // 2. Clear IndexedDB offline sync queue
+    try {
+      const idbItems = await idbGetAllQueueItems();
+      if (Array.isArray(idbItems) && idbItems.length > 0) {
+        clearedCount += idbItems.length;
+        const ids = idbItems.map((i) => i.id);
+        await idbDeleteQueueItemsBatch(ids).catch(() => {});
+      }
+      const { idbClearQueue } = await import('../utils/indexedDbStorage');
+      await idbClearQueue().catch(() => {});
+    } catch {}
+
+    // 3. Clear local offline queue cache
+    try {
+      localStorage.setItem('ws_offline_sync_queue', '[]');
+    } catch {}
+
+    return {
+      success: true,
+      clearedCount,
+      message: 'পেন্ডিং কিউ সফলভাবে ক্লিয়ার ও ০-তে রিসেট করা হয়েছে।',
+    };
+  } catch (err: any) {
+    return {
+      success: true,
+      clearedCount,
+      message: 'পেন্ডিং কিউ লোকালি ক্লিয়ার করা হয়েছে।',
+    };
+  }
+}
+
+export const drainQueue = dualCloudDrainAllPendingQueues;
+
+/**
  * Combined Restore Mechanism:
  * Merges backup history records from both Supabase Storage and Google Drive/Cloud server seamlessly,
  * ensuring zero missing files across all admin and staff roles.

@@ -20,7 +20,6 @@ import {
 import { toBnDigit } from '../utils/pdfHtmlTemplates';
 import { PdfPreviewModal } from './PdfPreviewModal';
 import { PhotoProductEntryModal, PhotoInboxEntry } from './PhotoProductEntryModal';
-import { StockPhotoManagerModal } from './StockPhotoManagerModal';
 import { DeviceContactPickerModal } from './DeviceContactPickerModal';
 import { AdminSalesPriceModal } from './AdminSalesPriceModal';
 import { EditPurchaseChallanModal } from './EditPurchaseChallanModal';
@@ -282,8 +281,6 @@ export const PosInvoiceView: React.FC<PosInvoiceViewProps> = ({ onOpenPhonebookM
   const [isAddProductOpen, setIsAddProductOpen] = useState<boolean>(false);
   const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
   const [isPhotoInboxOpen, setIsPhotoInboxOpen] = useState<boolean>(false);
-  const [isStockPhotoManagerOpen, setIsStockPhotoManagerOpen] = useState<boolean>(false);
-  const [stockPhotoTargetProductId, setStockPhotoTargetProductId] = useState<string | null>(null);
   const [productForm, setProductForm] = useState({
     name: '',
     brand: '',
@@ -295,85 +292,7 @@ export const PosInvoiceView: React.FC<PosInvoiceViewProps> = ({ onOpenPhonebookM
     retailPrice: 0,
     stockQuantity: 0,
     lowStockThreshold: 10,
-    image: '',
   });
-
-  // Product Add/Edit Form Camera state
-  const [isFormCameraOpen, setIsFormCameraOpen] = useState<boolean>(false);
-  const [isFormCompressing, setIsFormCompressing] = useState<boolean>(false);
-  const formVideoRef = useRef<HTMLVideoElement | null>(null);
-  const formStreamRef = useRef<MediaStream | null>(null);
-  const formFileInputRef = useRef<HTMLInputElement | null>(null);
-
-  const handleStartFormCamera = async () => {
-    try {
-      if (formStreamRef.current) {
-        formStreamRef.current.getTracks().forEach((t) => t.stop());
-      }
-      setIsFormCameraOpen(true);
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
-      });
-      formStreamRef.current = stream;
-      if (formVideoRef.current) {
-        formVideoRef.current.srcObject = stream;
-        formVideoRef.current.play();
-      }
-    } catch (err) {
-      console.warn('Form camera error:', err);
-      setIsFormCameraOpen(false);
-      formFileInputRef.current?.click();
-    }
-  };
-
-  const handleStopFormCamera = () => {
-    if (formStreamRef.current) {
-      formStreamRef.current.getTracks().forEach((t) => t.stop());
-      formStreamRef.current = null;
-    }
-    if (formVideoRef.current) {
-      formVideoRef.current.srcObject = null;
-    }
-    setIsFormCameraOpen(false);
-  };
-
-  const handleFormSnapPhoto = async () => {
-    if (!formVideoRef.current) return;
-    try {
-      setIsFormCompressing(true);
-      const video = formVideoRef.current;
-      const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 480;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-        const compressed = await compressImage(dataUrl, 640, 640, 0.75);
-        setProductForm((prev) => ({ ...prev, image: compressed }));
-      }
-    } catch (err) {
-      console.error('Snapshot error:', err);
-    } finally {
-      setIsFormCompressing(false);
-      handleStopFormCamera();
-    }
-  };
-
-  const handleFormFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      setIsFormCompressing(true);
-      const compressed = await compressImage(file, 640, 640, 0.75);
-      setProductForm((prev) => ({ ...prev, image: compressed }));
-    } catch (err) {
-      console.error('Upload compress error:', err);
-    } finally {
-      setIsFormCompressing(false);
-      if (e.target) e.target.value = '';
-    }
-  };
 
   // Add multiple photo inbox entries to POS cart
   const handleAddPhotoEntriesToCart = (entries: PhotoInboxEntry[]) => {
@@ -1258,7 +1177,6 @@ export const PosInvoiceView: React.FC<PosInvoiceViewProps> = ({ onOpenPhonebookM
       retailPrice: prod.retailPrice || 0,
       stockQuantity: prod.stockQuantity,
       lowStockThreshold: prod.lowStockThreshold || 10,
-      image: prod.image || '',
     });
   };
 
@@ -1649,19 +1567,6 @@ export const PosInvoiceView: React.FC<PosInvoiceViewProps> = ({ onOpenPhonebookM
           <span>{language === 'bn' ? 'ছবি দিয়ে বিক্রয়' : 'Photo Sales Inbox'}</span>
         </button>
 
-        {/* Quick Stock Photos Manager Trigger */}
-        <button
-          type="button"
-          onClick={() => {
-            setStockPhotoTargetProductId(null);
-            setIsStockPhotoManagerOpen(true);
-          }}
-          className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-teal-700 to-cyan-700 hover:from-teal-600 hover:to-cyan-600 text-white font-bold text-xs flex items-center gap-1.5 border border-teal-500/40 shadow-md transition active:scale-95 cursor-pointer shrink-0"
-          title="স্টকের পণ্যে দ্রুত ছবি তোলা বা যুক্ত করার ম্যানেজার"
-        >
-          <Camera className="w-3.5 h-3.5 text-cyan-300" />
-          <span>{language === 'bn' ? 'স্টক পণ্যের ছবি এন্ট্রি' : 'Stock Photos'}</span>
-        </button>
 
         {/* Quick Cash/DSR Memo & Khata Scanner Trigger */}
         <button
@@ -2399,46 +2304,11 @@ export const PosInvoiceView: React.FC<PosInvoiceViewProps> = ({ onOpenPhonebookM
                         className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800/90 hover:border-emerald-500/50 transition-all shadow-md hover:shadow-lg flex flex-col justify-between gap-3 group"
                       >
                         <div>
-                          {/* Top: Product Image and Detailed Title Info */}
+                          {/* Top: Product Title Info */}
                           <div className="flex items-start gap-3">
-                            {p.image ? (
-                              <div className="relative group/img shrink-0">
-                                <img
-                                  src={p.image}
-                                  alt={p.name}
-                                  className="w-16 h-16 sm:w-18 sm:h-18 rounded-xl object-cover border border-slate-700 shadow-sm"
-                                />
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setStockPhotoTargetProductId(p.id);
-                                    setIsStockPhotoManagerOpen(true);
-                                  }}
-                                  className="absolute inset-0 bg-black/60 opacity-0 group-hover/img:opacity-100 flex flex-col items-center justify-center rounded-xl text-[9px] text-white font-medium transition cursor-pointer"
-                                  title={language === 'bn' ? 'ছবি পরিবর্তন করুন' : 'Change Photo'}
-                                >
-                                  <Camera className="w-4 h-4 text-emerald-400" />
-                                  <span>{language === 'bn' ? 'বদল' : 'Change'}</span>
-                                </button>
-                              </div>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setStockPhotoTargetProductId(p.id);
-                                  setIsStockPhotoManagerOpen(true);
-                                }}
-                                className="w-16 h-16 sm:w-18 sm:h-18 rounded-xl bg-slate-950 border-2 border-dashed border-emerald-500/40 hover:border-emerald-400 hover:bg-emerald-950/40 flex flex-col items-center justify-center shrink-0 text-emerald-400 hover:text-emerald-300 transition cursor-pointer group/cam shadow-sm"
-                                title={language === 'bn' ? 'প্রোডাক্টে ছবি যুক্ত করুন' : 'Add Product Photo'}
-                              >
-                                <Camera className="w-5 h-5 text-emerald-400 mb-0.5 group-hover/cam:scale-110 transition" />
-                                <span className="text-[10px] font-bold text-emerald-400 leading-none">
-                                  {language === 'bn' ? '+ ছবি' : '+ Photo'}
-                                </span>
-                              </button>
-                            )}
+                            <div className="w-12 h-12 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-center shrink-0 text-emerald-400 shadow-sm">
+                              <Package className="w-6 h-6 text-emerald-400" />
+                            </div>
 
                             <div className="min-w-0 flex-1">
                               <div className="flex items-start justify-between gap-1.5">
@@ -2640,17 +2510,9 @@ export const PosInvoiceView: React.FC<PosInvoiceViewProps> = ({ onOpenPhonebookM
                           }`}
                         >
                           <div className="flex items-center gap-2 min-w-0 flex-1">
-                            {item.product.image ? (
-                              <img
-                                src={item.product.image}
-                                alt={item.product.name}
-                                className="w-9 h-9 rounded-lg object-cover border border-slate-700 shrink-0"
-                              />
-                            ) : (
-                              <div className="w-9 h-9 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center shrink-0 text-slate-500">
-                                <Package className="w-4 h-4 text-slate-500" />
-                              </div>
-                            )}
+                            <div className="w-8 h-8 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center shrink-0 text-slate-400">
+                              <Package className="w-4 h-4 text-slate-400" />
+                            </div>
                             <div className="min-w-0 flex-1">
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 <span className="font-bold text-xs text-white break-words leading-tight" title={item.product.name}>
@@ -3869,19 +3731,6 @@ export const PosInvoiceView: React.FC<PosInvoiceViewProps> = ({ onOpenPhonebookM
               <button
                 type="button"
                 onClick={() => {
-                  setStockPhotoTargetProductId(null);
-                  setIsStockPhotoManagerOpen(true);
-                }}
-                className="px-3.5 py-2 bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-500 hover:to-cyan-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow cursor-pointer"
-                title="স্টকের পণ্যে দ্রুত ছবি যুক্ত করার ম্যানেজার"
-              >
-                <Camera className="w-4 h-4 text-cyan-200" />
-                <span>{language === 'bn' ? 'স্টক পণ্যের ছবি এন্ট্রি' : 'Stock Photos'}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
                   const res = mergeAllDuplicateProducts();
                   setMergeFeedbackMsg(res.message);
                   setTimeout(() => setMergeFeedbackMsg(null), 6000);
@@ -3908,7 +3757,6 @@ export const PosInvoiceView: React.FC<PosInvoiceViewProps> = ({ onOpenPhonebookM
                     retailPrice: 0,
                     stockQuantity: 0,
                     lowStockThreshold: 10,
-                    image: '',
                   });
                   setIsAddProductOpen(true);
                 }}
@@ -3975,29 +3823,8 @@ export const PosInvoiceView: React.FC<PosInvoiceViewProps> = ({ onOpenPhonebookM
                   >
                     <div>
                       <div className="flex items-start gap-3">
-                        <div
-                          onClick={() => {
-                            setStockPhotoTargetProductId(p.id);
-                            setIsStockPhotoManagerOpen(true);
-                          }}
-                          className="relative group cursor-pointer shrink-0"
-                          title={language === 'bn' ? 'ছবি তুলুন বা পরিবর্তন করুন' : 'Snap or change photo'}
-                        >
-                          {p.image ? (
-                            <img
-                              src={p.image}
-                              alt={p.name}
-                              className="w-14 h-14 rounded-xl object-cover border border-slate-700 shrink-0 shadow-sm group-hover:border-emerald-500 transition"
-                            />
-                          ) : (
-                            <div className="w-14 h-14 rounded-xl bg-slate-900 border border-amber-500/40 flex flex-col items-center justify-center shrink-0 text-slate-500 group-hover:border-amber-400 transition">
-                              <Camera className="w-4 h-4 text-amber-400" />
-                              <span className="text-[8px] text-amber-300 font-bold">ছবি তুলুন</span>
-                            </div>
-                          )}
-                          <div className="absolute inset-0 bg-black/50 rounded-xl opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
-                            <Camera className="w-4 h-4 text-white" />
-                          </div>
+                        <div className="w-11 h-11 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center shrink-0 text-emerald-400 shadow-sm">
+                          <Package className="w-5 h-5 text-emerald-400" />
                         </div>
 
                         <div className="min-w-0 flex-1">
@@ -4122,18 +3949,6 @@ export const PosInvoiceView: React.FC<PosInvoiceViewProps> = ({ onOpenPhonebookM
                           <span>{language === 'bn' ? 'বিক্রয় দর' : 'Price'}</span>
                         </button>
 
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setStockPhotoTargetProductId(p.id);
-                            setIsStockPhotoManagerOpen(true);
-                          }}
-                          className="px-2 py-1 bg-emerald-950/60 hover:bg-emerald-900/80 text-emerald-300 hover:text-white rounded-lg text-xs font-semibold transition flex items-center gap-1 border border-emerald-500/40 cursor-pointer"
-                          title={language === 'bn' ? 'ক্যামেরা দিয়ে ছবি তুলুন বা বদলান' : 'Snap photo'}
-                        >
-                          <Camera className="w-3 h-3 text-emerald-400" />
-                          <span>{p.image ? (language === 'bn' ? 'ছবি বদল' : 'Change') : (language === 'bn' ? 'ছবি তুলুন' : 'Add Photo')}</span>
-                        </button>
 
                         <button
                           type="button"
@@ -4929,106 +4744,6 @@ export const PosInvoiceView: React.FC<PosInvoiceViewProps> = ({ onOpenPhonebookM
             </div>
 
             <form onSubmit={handleSaveProduct} className="space-y-3 text-xs">
-              {/* Product Photo Uploader & Camera */}
-              <div className="space-y-1.5 p-3 rounded-xl bg-slate-950 border border-slate-800">
-                <div className="flex items-center justify-between">
-                  <span className="text-slate-400 font-medium flex items-center gap-1.5">
-                    <Camera className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>{language === 'bn' ? 'পণ্যের ছবি (ম্যানুয়াল / ক্যামেরা)' : 'Product Photo'}</span>
-                  </span>
-                  {productForm.image && (
-                    <button
-                      type="button"
-                      onClick={() => setProductForm({ ...productForm, image: '' })}
-                      className="text-[10px] text-rose-400 hover:text-rose-300 flex items-center gap-0.5 cursor-pointer"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                      <span>{language === 'bn' ? 'ছবি মুছুন' : 'Remove'}</span>
-                    </button>
-                  )}
-                </div>
-
-                {isFormCameraOpen ? (
-                  <div className="relative rounded-xl overflow-hidden bg-black aspect-video flex items-center justify-center border border-emerald-500/50">
-                    <video
-                      ref={formVideoRef}
-                      autoPlay
-                      playsInline
-                      muted
-                      className="w-full h-full object-cover"
-                    />
-                    <div className="absolute inset-x-0 bottom-2 flex items-center justify-center gap-2">
-                      <button
-                        type="button"
-                        onClick={handleFormSnapPhoto}
-                        disabled={isFormCompressing}
-                        className="px-4 py-1.5 rounded-full bg-emerald-500 text-slate-950 font-bold text-xs shadow-lg flex items-center gap-1 cursor-pointer"
-                      >
-                        <Camera className="w-3.5 h-3.5" />
-                        <span>{isFormCompressing ? 'প্রসেসিং...' : (language === 'bn' ? 'ছবি তুলুন' : 'Snap')}</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleStopFormCamera}
-                        className="p-1.5 rounded-full bg-slate-900 text-white text-xs border border-slate-700 cursor-pointer"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-3">
-                    {productForm.image ? (
-                      <img
-                        src={productForm.image}
-                        alt="Product Preview"
-                        className="w-16 h-16 rounded-xl object-cover border border-emerald-500/40 shadow-sm shrink-0"
-                      />
-                    ) : (
-                      <div className="w-16 h-16 rounded-xl bg-slate-900 border border-slate-800 flex flex-col items-center justify-center text-slate-500 shrink-0">
-                        <ImageIcon className="w-6 h-6" />
-                        <span className="text-[9px] mt-0.5">ছবি নেই</span>
-                      </div>
-                    )}
-
-                    <div className="flex-1 space-y-1.5">
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={handleStartFormCamera}
-                          className="flex-1 py-1.5 px-2 bg-slate-900 hover:bg-slate-800 text-emerald-300 rounded-lg text-xs font-semibold border border-slate-700 hover:border-emerald-500/40 flex items-center justify-center gap-1.5 transition cursor-pointer"
-                        >
-                          <Camera className="w-3.5 h-3.5" />
-                          <span>{language === 'bn' ? 'ক্যামেরা' : 'Take Photo'}</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => formFileInputRef.current?.click()}
-                          className="flex-1 py-1.5 px-2 bg-slate-900 hover:bg-slate-800 text-sky-300 rounded-lg text-xs font-semibold border border-slate-700 hover:border-sky-500/40 flex items-center justify-center gap-1.5 transition cursor-pointer"
-                        >
-                          <Upload className="w-3.5 h-3.5" />
-                          <span>{language === 'bn' ? 'ফাইল আপলোড' : 'Upload'}</span>
-                        </button>
-                      </div>
-                      <p className="text-[10px] text-slate-500 leading-tight">
-                        {language === 'bn'
-                          ? 'ছবি দিলে সেলস ও রিপ্লেসমেন্ট এন্ট্রিতে সহজেই ছবি দিয়ে চিহ্নিত করা যাবে।'
-                          : 'Product photo enables quick visual recognition in sales & replacements.'}
-                      </p>
-                    </div>
-
-                    <input
-                      ref={formFileInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handleFormFileUpload}
-                      className="hidden"
-                    />
-                  </div>
-                )}
-              </div>
-
               <div className="space-y-1">
                 <label className="text-slate-400 block font-medium">
                   {language === 'bn' ? 'পণ্যের নাম' : 'Product Name'} *
@@ -5338,15 +5053,6 @@ export const PosInvoiceView: React.FC<PosInvoiceViewProps> = ({ onOpenPhonebookM
         onAddSalesToCart={handleAddPhotoEntriesToCart}
       />
 
-      {/* Stock Product Photo Manager Modal */}
-      <StockPhotoManagerModal
-        isOpen={isStockPhotoManagerOpen}
-        onClose={() => {
-          setIsStockPhotoManagerOpen(false);
-          setStockPhotoTargetProductId(null);
-        }}
-        targetProductId={stockPhotoTargetProductId}
-      />
 
       {/* Device Contact Picker Modal (Online & Offline Mobile Phonebook) */}
       <DeviceContactPickerModal

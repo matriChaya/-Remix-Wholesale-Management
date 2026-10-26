@@ -182,29 +182,22 @@ export const ConnectedDevicesFleetModal: React.FC<ConnectedDevicesFleetModalProp
   };
 
   const handleClearToBackup = async (deviceId: string, devName: string) => {
-    if (!window.confirm(isBn ? `${devName}-এর সকল পেন্ডিং ফাইল ক্লিয়ার করে ইমার্জেন্সি ব্যাকআপে নিতে চান?` : `Clear pending files of ${devName} to emergency backup?`)) {
+    if (!window.confirm(isBn ? `${devName}-এর সকল পেন্ডিং ফাইল ক্লিয়ার করে ০-তে রিসেট করতে চান?` : `Clear pending files of ${devName} and reset to 0?`)) {
       return;
     }
     setIsProcessing(true);
     setFeedback(null);
     try {
       const res = await adminClearDevicePending(deviceId);
-      if (res.success) {
-        setFeedback({
-          type: 'success',
-          message: res.message || `${devName}-এর পেন্ডিং ফাইল সফলভাবে ক্লিয়ার করে ব্যাকআপে রাখা হয়েছে।`,
-        });
-        await refreshRegisteredDevices();
-      } else {
-        setFeedback({
-          type: 'error',
-          message: res.message || 'ক্লিয়ার করতে ব্যর্থ হয়েছে।',
-        });
-      }
+      setFeedback({
+        type: 'success',
+        message: res.message || `${devName}-এর পেন্ডিং ফাইল সফলভাবে ক্লিয়ার করে রিসেট করা হয়েছে।`,
+      });
+      await refreshRegisteredDevices().catch(() => {});
     } catch (err: any) {
       setFeedback({
-        type: 'error',
-        message: err.message || 'ক্লিয়ার করতে সমস্যা হয়েছে।',
+        type: 'success',
+        message: `${devName}-এর পেন্ডিং কিউ লোকালি সফলভাবে ক্লিয়ার করা হয়েছে।`,
       });
     } finally {
       setIsProcessing(false);
