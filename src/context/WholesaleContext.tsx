@@ -116,6 +116,12 @@ import {
   isDriveBackupToggleEnabled,
   setDriveBackupToggleEnabled,
 } from '../services/googleDriveService';
+import {
+  dualWriteData,
+  dualDeleteData,
+  DualWriteOptions,
+  DualWriteResult,
+} from '../services/dualSyncService';
 
 interface WholesaleContextType {
   language: Language;
@@ -697,6 +703,13 @@ interface WholesaleContextType {
   isAutoSigning: boolean;
   toggleAutoSigning: (enabled?: boolean) => void;
   drainPendingFilesNow: () => Promise<number>;
+  
+  // Dual-Live Sync Architecture (Supabase PostgreSQL + Firebase Firestore)
+  dualWriteData: (
+    collectionName: string,
+    data: any,
+    options?: DualWriteOptions
+  ) => Promise<DualWriteResult>;
 }
 
 export const DELETED_USERS_STORAGE_KEY = 'ws_deleted_user_ids';
@@ -1927,15 +1940,28 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
 
   const isRemoteUpdateRef = useRef<boolean>(false);
 
-  // Helper: Realtime Auto-Sync & Instant Multi-Device Broadcast via Supabase (Zero Hassle)
+  // ⚡ Dual-Live Sync Architecture: Saves any sales (orders), inventory (products),
+  // or other ERP data simultaneously to both Supabase and Firebase Firestore in real-time.
+  const handleDualWriteData = useCallback(
+    async (collectionName: string, data: any, options?: DualWriteOptions): Promise<DualWriteResult> => {
+      const adminPhone = options?.adminPhone || currentUser?.adminPhone || currentUser?.phone || '01937200635';
+      const updatedBy = options?.updatedBy || currentUser?.name || 'Staff';
+      return await dualWriteData(collectionName, data, {
+        adminPhone,
+        updatedBy,
+        ...options,
+      });
+    },
+    [currentUser]
+  );
+
+  // Helper: Realtime Auto-Sync & Instant Multi-Device Broadcast via Dual-Live Sync (Supabase + Firebase)
   const autoSyncToSupabase = useCallback(
     (collection: string, data: any) => {
       if (isRemoteUpdateRef.current) return;
-      const adminPhone = currentUser?.adminPhone || currentUser?.phone || '01937200635';
-      const userName = currentUser?.name || 'Staff';
-      pushEntityToSupabase(collection, data, adminPhone, userName).catch(() => {});
+      handleDualWriteData(collection, data).catch(() => {});
     },
-    [currentUser]
+    [handleDualWriteData]
   );
 
   // Multi-Device Instant Real-Time Synchronization Listener (Supabase Channels)
@@ -2204,6 +2230,18 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setHasCloudQuotaNotice(true);
       }
     }
+
+    // ⚡ Dual-Live Sync Architecture: Concurrently push to Supabase as well
+    try {
+      const adminPhone = currentUser?.adminPhone || currentUser?.phone || '01937200635';
+      const userName = currentUser?.name || 'Staff';
+      dualWriteData(collName, cleanData, {
+        docId,
+        adminPhone,
+        updatedBy: userName,
+        skipBroadcast: false,
+      }).catch(() => {});
+    } catch {}
   };
 
   // Safe Firestore document delete helper
@@ -2229,6 +2267,16 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         setHasCloudQuotaNotice(true);
       }
     }
+
+    // ⚡ Dual-Live Sync Architecture: Concurrently delete from Supabase as well
+    try {
+      const adminPhone = currentUser?.adminPhone || currentUser?.phone || '01937200635';
+      const userName = currentUser?.name || 'Staff';
+      dualDeleteData(collName, docId, {
+        adminPhone,
+        updatedBy: userName,
+      }).catch(() => {});
+    } catch {}
   };
 
   // Cross-device Real-Time Sync Broadcaster Ping Helper
@@ -10133,6 +10181,7 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
         isAutoSigning,
         toggleAutoSigning,
         drainPendingFilesNow,
+        dualWriteData: handleDualWriteData,
 
         // Biometric Authentication & Secure Storage Bridge
         isBiometricLocked,

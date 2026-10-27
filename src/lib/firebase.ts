@@ -21,9 +21,15 @@ import {
   disableNetwork,
   setLogLevel,
 } from 'firebase/firestore';
-import firebaseConfig from '../../firebase-applet-config.json';
-
-export { firebaseConfig };
+// Official Firebase Configuration provided by user for Dual-Live Sync Architecture
+export const firebaseConfig = {
+  apiKey: "AIzaSyDhxBJKEbA9zLCFVXBr60pwIp1zN1RLWLg",
+  authDomain: "mctgsmdeveloper.firebaseapp.com",
+  projectId: "mctgsmdeveloper",
+  storageBucket: "mctgsmdeveloper.firebasestorage.app",
+  messagingSenderId: "926223322019",
+  appId: "1:926223322019:web:f9fd5d72c919108248a816"
+};
 
 // Initialize Firebase App instance
 export const app: FirebaseApp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
