@@ -10,11 +10,13 @@ import {
   Building2,
   Package,
   CheckCircle2,
+  RefreshCw,
 } from 'lucide-react';
 import { SupplierLedgerEntry, SupplierPurchaseItem } from '../types';
 import { useWholesale } from '../context/WholesaleContext';
 import { formatCurrency, round2 } from '../utils/translations';
 import { areProductNamesEquivalent, normalizeProductKey } from '../utils/productDeduplication';
+import { generateDateBasedChallanNo } from '../utils/invoiceNumberHelper';
 
 interface EditPurchaseChallanModalProps {
   isOpen: boolean;
@@ -29,7 +31,7 @@ export const EditPurchaseChallanModal: React.FC<EditPurchaseChallanModalProps> =
   challan,
   onSuccess,
 }) => {
-  const { suppliers, products, updateSupplierPurchaseChallan, language } = useWholesale();
+  const { suppliers, products, supplierLedger, updateSupplierPurchaseChallan, language } = useWholesale();
 
   const [supplierId, setSupplierId] = useState<string>('');
   const [referenceNo, setReferenceNo] = useState<string>('');
@@ -39,6 +41,7 @@ export const EditPurchaseChallanModal: React.FC<EditPurchaseChallanModalProps> =
   const [paymentMethod, setPaymentMethod] = useState<string>('Credit');
   const [notes, setNotes] = useState<string>('');
   const [items, setItems] = useState<SupplierPurchaseItem[]>([]);
+  const [isAutoChallanNo, setIsAutoChallanNo] = useState<boolean>(true);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -196,6 +199,21 @@ export const EditPurchaseChallanModal: React.FC<EditPurchaseChallanModalProps> =
   const totalCalculatedAmount = items.reduce((sum, it) => sum + (Number(it.totalPrice) || 0), 0);
   const amountDiff = totalCalculatedAmount - (challan.amount || 0);
 
+  const handleDateChange = (newDate: string) => {
+    setDate(newDate);
+    if (isAutoChallanNo && newDate) {
+      const autoChallan = generateDateBasedChallanNo(newDate, challan?.id, supplierLedger);
+      setReferenceNo(autoChallan);
+    }
+  };
+
+  const handleRegenerateChallanNo = () => {
+    if (date) {
+      const autoChallan = generateDateBasedChallanNo(date, challan?.id, supplierLedger);
+      setReferenceNo(autoChallan);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
@@ -302,7 +320,7 @@ export const EditPurchaseChallanModal: React.FC<EditPurchaseChallanModalProps> =
           {/* Top Form Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
             {/* Supplier Select */}
-            <div className="sm:col-span-2 md:col-span-1">
+            <div>
               <label className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1">
                 <Building2 className="w-3 h-3 text-amber-400" />
                 <span>{language === 'bn' ? 'সাপ্লায়ার / কোম্পানি' : 'Supplier Company'}</span>
@@ -321,34 +339,53 @@ export const EditPurchaseChallanModal: React.FC<EditPurchaseChallanModalProps> =
               </select>
             </div>
 
-            {/* Reference No */}
-            <div>
-              <label className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1">
-                <FileText className="w-3 h-3 text-sky-400" />
-                <span>{language === 'bn' ? 'চালান / ইনভয়েস নং' : 'Challan / Invoice #'}</span>
-              </label>
-              <input
-                type="text"
-                value={referenceNo}
-                onChange={(e) => setReferenceNo(e.target.value)}
-                required
-                className="w-full mt-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono font-bold text-white focus:outline-none focus:border-sky-500"
-              />
-            </div>
-
             {/* Date */}
             <div>
               <label className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1">
                 <Calendar className="w-3 h-3 text-emerald-400" />
-                <span>{language === 'bn' ? 'চালানের তারিখ' : 'Challan Date'}</span>
+                <span>{language === 'bn' ? 'চালানের তারিখ (Date)' : 'Challan Date'}</span>
               </label>
               <input
                 type="date"
                 value={date}
-                onChange={(e) => setDate(e.target.value)}
+                onChange={(e) => handleDateChange(e.target.value)}
                 required
                 className="w-full mt-1 bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-white focus:outline-none focus:border-emerald-500"
               />
+              <span className="text-[10px] text-slate-400 mt-1 block">
+                {language === 'bn' ? 'তারিখ বদলালে চালান নং স্বয়ংক্রিয়ভাবে আপডেট হবে' : 'Date change auto-updates challan #'}
+              </span>
+            </div>
+
+            {/* Reference No */}
+            <div>
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1">
+                  <FileText className="w-3 h-3 text-sky-400" />
+                  <span>{language === 'bn' ? 'চালান / ইনভয়েস নং' : 'Challan / Invoice #'}</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={handleRegenerateChallanNo}
+                  className="text-[10px] text-sky-400 hover:text-sky-300 flex items-center gap-0.5 font-bold cursor-pointer transition"
+                >
+                  <RefreshCw className="w-2.5 h-2.5" />
+                  <span>{language === 'bn' ? 'অটো জেনারেট' : 'Auto Generate'}</span>
+                </button>
+              </div>
+              <input
+                type="text"
+                value={referenceNo}
+                onChange={(e) => {
+                  setReferenceNo(e.target.value);
+                  setIsAutoChallanNo(false);
+                }}
+                required
+                className="w-full mt-1 bg-slate-950 border border-sky-600/50 rounded-xl px-3 py-2 text-xs font-mono font-bold text-sky-300 focus:outline-none focus:border-sky-400"
+              />
+              <span className="text-[10px] text-sky-400/90 mt-1 block font-mono">
+                {language === 'bn' ? 'একই তারিখে একাধিক হলে -১, -২, -৩ ক্রমিক হবে' : 'Suffix 1, 2, 3... applies on same date'}
+              </span>
             </div>
           </div>
 

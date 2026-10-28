@@ -14,10 +14,15 @@ import {
   Phone,
   User,
   Percent,
+  RefreshCw,
+  DollarSign,
+  CreditCard,
+  Building,
 } from 'lucide-react';
 import { OrderInvoice, OrderItem, Product, Retailer } from '../types';
 import { useWholesale } from '../context/WholesaleContext';
 import { formatCurrency } from '../utils/translations';
+import { generateDateBasedInvoiceNo } from '../utils/invoiceNumberHelper';
 
 interface EditSalesInvoiceModalProps {
   isOpen: boolean;
@@ -32,7 +37,7 @@ export const EditSalesInvoiceModal: React.FC<EditSalesInvoiceModalProps> = ({
   order,
   onSuccess,
 }) => {
-  const { retailers, products, users, updateOrderInvoice, language } = useWholesale();
+  const { retailers, products, users, orders, updateOrderInvoice, language } = useWholesale();
 
   const [invoiceNo, setInvoiceNo] = useState<string>('');
   const [date, setDate] = useState<string>('');
@@ -42,6 +47,9 @@ export const EditSalesInvoiceModal: React.FC<EditSalesInvoiceModalProps> = ({
   const [customerPhone, setCustomerPhone] = useState<string>('');
   const [salesPersonRole, setSalesPersonRole] = useState<string>('counter');
   const [salesPersonName, setSalesPersonName] = useState<string>('');
+  const [salesPersonId, setSalesPersonId] = useState<string>('');
+  const [targetCashAccount, setTargetCashAccount] = useState<string>('CREATOR_DRAWER');
+  const [isAutoInvoiceNo, setIsAutoInvoiceNo] = useState<boolean>(true);
   const [paymentType, setPaymentType] = useState<string>('CASH');
   const [paidAmount, setPaidAmount] = useState<number>(0);
   const [discountAmount, setDiscountAmount] = useState<number>(0);
@@ -62,6 +70,8 @@ export const EditSalesInvoiceModal: React.FC<EditSalesInvoiceModalProps> = ({
     setCustomerPhone(order.retailerPhone || order.customerPhone || '');
     setSalesPersonRole(order.salesPersonRole || order.creatorRole || 'counter');
     setSalesPersonName(order.salesPersonName || order.creatorName || '');
+    setSalesPersonId(order.salesPersonId || order.creatorId || '');
+    setTargetCashAccount((order as any).targetCashAccount || 'CREATOR_DRAWER');
     setPaymentType(order.paymentType || (order.paymentMethod === 'Cash' ? 'CASH' : 'CREDIT'));
     setPaidAmount(Number(order.paidAmount) || 0);
     setDiscountAmount(Number(order.discountAmount ?? order.discount) || 0);
@@ -226,6 +236,31 @@ export const EditSalesInvoiceModal: React.FC<EditSalesInvoiceModalProps> = ({
   const totalProfitAmount = Math.max(0, grandTotal - totalCostAmount);
   const dueAmount = Math.max(0, grandTotal - paidAmount);
 
+  // Date change handler with automatic date-based sequential invoice number
+  const handleDateChange = (newDate: string) => {
+    setDate(newDate);
+    if (isAutoInvoiceNo && newDate) {
+      const autoNo = generateDateBasedInvoiceNo(newDate, order?.id, orders);
+      setInvoiceNo(autoNo);
+    }
+  };
+
+  const handleRegenerateInvoiceNo = () => {
+    if (date) {
+      const autoNo = generateDateBasedInvoiceNo(date, order?.id, orders);
+      setInvoiceNo(autoNo);
+    }
+  };
+
+  const handlePaymentTypeChange = (newType: string) => {
+    setPaymentType(newType);
+    if (newType === 'CASH' || newType === 'BANK' || newType === 'MOBILE') {
+      setPaidAmount(grandTotal);
+    } else if (newType === 'CREDIT') {
+      setPaidAmount(0);
+    }
+  };
+
   // Save handler
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -255,10 +290,11 @@ export const EditSalesInvoiceModal: React.FC<EditSalesInvoiceModalProps> = ({
         customerPhone: finalPhone,
         salesPersonRole,
         salesPersonName,
+        salesPersonId: salesPersonId || order.salesPersonId,
         creatorRole: salesPersonRole || order.creatorRole || 'counter',
         creatorName: salesPersonName || order.creatorName || '',
-        creatorId: order.creatorId,
-        salesPersonId: order.salesPersonId,
+        creatorId: salesPersonId || order.creatorId,
+        targetCashAccount,
         items,
         totalSalesAmount,
         totalReplacementAmount,
@@ -272,7 +308,7 @@ export const EditSalesInvoiceModal: React.FC<EditSalesInvoiceModalProps> = ({
         discountAmount,
         totalAmount: grandTotal,
         paymentType,
-        paymentMethod: paymentType === 'CASH' ? 'Cash' : paymentType === 'CREDIT' ? 'Credit' : 'Cash',
+        paymentMethod: paymentType === 'CREDIT' ? 'Credit' : paymentType === 'BANK' ? 'Bank' : 'Cash',
         paidAmount,
         dueAmount,
         notes,
@@ -344,81 +380,155 @@ export const EditSalesInvoiceModal: React.FC<EditSalesInvoiceModalProps> = ({
             </div>
           )}
 
-          {/* Top Meta: Date, Retailer, Phone, Staff */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80">
-            <div>
-              <label className="text-[11px] font-bold text-slate-300 flex items-center gap-1 mb-1">
-                <Calendar className="w-3 h-3 text-emerald-400" />
-                <span>{language === 'bn' ? 'চালানের তারিখ:' : 'Invoice Date:'}</span>
-              </label>
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono"
-              />
+          {/* Top Meta: Date, Invoice No, Retailer, Phone, Staff Seller Dropdown */}
+          <div className="space-y-3 bg-slate-950/70 p-4 rounded-xl border border-slate-800/80">
+            {/* Row 1: Date & Auto-Generated Sequential Invoice Number */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              <div>
+                <label className="text-[11px] font-bold text-slate-300 flex items-center gap-1 mb-1">
+                  <Calendar className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>{language === 'bn' ? 'চালানের তারিখ (Date):' : 'Invoice Date:'}</span>
+                </label>
+                <input
+                  type="date"
+                  value={date}
+                  onChange={(e) => handleDateChange(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono"
+                />
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  {language === 'bn' ? 'তারিখ বদলালে মেমো নং স্বয়ংক্রিয়ভাবে আপডেট হবে' : 'Date change auto-updates invoice number'}
+                </span>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] font-bold text-slate-300 flex items-center gap-1">
+                    <FileCheck className="w-3.5 h-3.5 text-sky-400" />
+                    <span>{language === 'bn' ? 'ইনভয়েস নম্বর (Auto Sequential):' : 'Invoice Number:'}</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleRegenerateInvoiceNo}
+                    title="তারিখ অনুসারে ক্রমিক নম্বর পুনরায় জেনারেট করুন"
+                    className="text-[10px] text-sky-400 hover:text-sky-300 flex items-center gap-0.5 font-bold cursor-pointer transition"
+                  >
+                    <RefreshCw className="w-2.5 h-2.5" />
+                    <span>{language === 'bn' ? 'অটো জেনারেট' : 'Auto Generate'}</span>
+                  </button>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="text"
+                    value={invoiceNo}
+                    onChange={(e) => {
+                      setInvoiceNo(e.target.value);
+                      setIsAutoInvoiceNo(false);
+                    }}
+                    placeholder="INV-YYYYMMDD-1"
+                    className="w-full bg-slate-900 border border-sky-600/50 rounded-lg px-2.5 py-1.5 text-xs text-sky-300 focus:outline-none focus:border-sky-400 font-mono font-bold"
+                  />
+                </div>
+                <span className="text-[10px] text-sky-400/90 mt-1 block font-mono">
+                  {language === 'bn' ? 'একই তারিখে একাধিক মেমো হলে -১, -২, -৩ ক্রমিক হবে' : 'Suffix 1, 2, 3... applies on same date'}
+                </span>
+              </div>
+
+              {/* Retailer / Shop Select */}
+              <div>
+                <label className="text-[11px] font-bold text-slate-300 flex items-center gap-1 mb-1">
+                  <Store className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>{language === 'bn' ? 'দোকান / রিটেইলার:' : 'Retailer / Shop:'}</span>
+                </label>
+                <select
+                  value={retailerId}
+                  onChange={(e) => {
+                    const selId = e.target.value;
+                    setRetailerId(selId);
+                    if (selId === 'walkin' || !selId) {
+                      setShopName('সাধারণ ক্যাশ কাস্টমার');
+                      setCustomerName('সাধারণ ক্রেতা');
+                      setCustomerPhone('');
+                    } else {
+                      const ret = retailers.find((r) => r.id === selId);
+                      if (ret) {
+                        setShopName(ret.shopName || ret.name);
+                        setCustomerName(ret.ownerName || ret.name);
+                        setCustomerPhone(ret.phone);
+                      }
+                    }
+                  }}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="walkin">{language === 'bn' ? '🛒 সাধারণ ক্যাশ কাস্টমার (Walk-in Customer)' : 'Walk-in Customer'}</option>
+                  {retailers.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.shopName || r.name} ({r.phone})
+                    </option>
+                  ))}
+                </select>
+                <div className="text-[10px] text-slate-400 mt-1 truncate">
+                  {shopName} {customerName ? `— ${customerName}` : ''}
+                </div>
+              </div>
             </div>
 
-            <div>
-              <label className="text-[11px] font-bold text-slate-300 flex items-center gap-1 mb-1">
-                <Store className="w-3 h-3 text-emerald-400" />
-                <span>{language === 'bn' ? 'দোকান / রিটেইলার:' : 'Retailer / Shop:'}</span>
-              </label>
-              <select
-                value={retailerId}
-                onChange={(e) => {
-                  setRetailerId(e.target.value);
-                  const ret = retailers.find((r) => r.id === e.target.value);
-                  if (ret) {
-                    setShopName(ret.shopName || ret.name);
-                    setCustomerName(ret.ownerName || ret.name);
-                    setCustomerPhone(ret.phone);
-                  }
-                }}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
-              >
-                {retailers.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.shopName || r.name} ({r.phone})
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* Row 2: Customer Phone & Seller / Entry Creator Dropdown with Acceptance Badge */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-slate-800/80">
+              <div>
+                <label className="text-[11px] font-bold text-slate-300 flex items-center gap-1 mb-1">
+                  <Phone className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>{language === 'bn' ? 'গ্রাহকের মোবাইল নম্বর:' : 'Customer Phone Number:'}</span>
+                </label>
+                <input
+                  type="text"
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  placeholder="01XXXXXXXXX"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono"
+                />
+              </div>
 
-            <div>
-              <label className="text-[11px] font-bold text-slate-300 flex items-center gap-1 mb-1">
-                <Phone className="w-3 h-3 text-emerald-400" />
-                <span>{language === 'bn' ? 'মোবাইল নম্বর:' : 'Phone Number:'}</span>
-              </label>
-              <input
-                type="text"
-                value={customerPhone}
-                onChange={(e) => setCustomerPhone(e.target.value)}
-                placeholder="01XXXXXXXXX"
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-mono"
-              />
-            </div>
-
-            <div>
-              <label className="text-[11px] font-bold text-slate-300 flex items-center gap-1 mb-1">
-                <User className="w-3 h-3 text-emerald-400" />
-                <span>{language === 'bn' ? 'বিক্রয়কর্মী / স্টাফ:' : 'Sales Staff:'}</span>
-              </label>
-              <select
-                value={salesPersonName}
-                onChange={(e) => {
-                  setSalesPersonName(e.target.value);
-                  const u = users.find((usr) => usr.name === e.target.value);
-                  if (u) setSalesPersonRole(u.role);
-                }}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500"
-              >
-                {users.map((u) => (
-                  <option key={u.id} value={u.name}>
-                    {u.name} ({u.role.toUpperCase()})
-                  </option>
-                ))}
-              </select>
+              {/* Seller / Creator Dropdown (Admin Correction) */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] font-bold text-slate-300 flex items-center gap-1">
+                    <User className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>{language === 'bn' ? 'সেলার / এন্ট্রি গ্রহণকারী (Seller Dropdown):' : 'Seller / Creator (Dropdown):'}</span>
+                  </label>
+                  <span className="text-[10px] text-emerald-400 font-bold px-1.5 py-0.5 rounded bg-emerald-950/80 border border-emerald-700/50">
+                    {salesPersonRole.toUpperCase()}
+                  </span>
+                </div>
+                <select
+                  value={salesPersonId || users.find(u => u.name === salesPersonName)?.id || salesPersonName}
+                  onChange={(e) => {
+                    const selVal = e.target.value;
+                    const u = users.find((usr) => usr.id === selVal || usr.name === selVal);
+                    if (u) {
+                      setSalesPersonId(u.id);
+                      setSalesPersonName(u.name);
+                      setSalesPersonRole(u.role);
+                    } else {
+                      setSalesPersonName(selVal);
+                    }
+                  }}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-semibold"
+                >
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.name} — {u.role === 'admin' ? 'এডমিন (Admin)' : u.role === 'dsr' ? 'ডিএসআর (DSR)' : u.role === 'counter' ? 'কাউন্টার ক্যাশ (Counter)' : u.role.toUpperCase()}
+                    </option>
+                  ))}
+                </select>
+                <div className="mt-1.5 px-2.5 py-1 rounded-lg bg-emerald-950/60 border border-emerald-600/40 text-[10px] text-emerald-300 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <span>
+                    {language === 'bn'
+                      ? `এই সেলার (${salesPersonName || 'স্টাফ'} - ${salesPersonRole.toUpperCase()}) এর একাউন্ট থেকে মেমো আপডেট একসেপ্ট হবে।`
+                      : `Invoice updates will be accepted under ${salesPersonName} (${salesPersonRole.toUpperCase()})`}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -625,28 +735,53 @@ export const EditSalesInvoiceModal: React.FC<EditSalesInvoiceModalProps> = ({
 
           {/* Financials & Payment Summary Box */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-950 p-4 rounded-xl border border-slate-800">
-            {/* Left: Payment Method & Notes */}
+            {/* Left: Payment Method & Target Cash Account Dropdowns & Notes */}
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-2">
+              {/* Payment Mode & Paid Amount */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[11px] font-bold text-slate-300 block mb-1">
-                    {language === 'bn' ? 'পেমেন্ট ধরন:' : 'Payment Mode:'}
+                  <label className="text-[11px] font-bold text-slate-300 flex items-center justify-between mb-1">
+                    <span className="flex items-center gap-1">
+                      <CreditCard className="w-3 h-3 text-emerald-400" />
+                      <span>{language === 'bn' ? 'লেনদেনের ধরন (Mode):' : 'Payment Mode:'}</span>
+                    </span>
                   </label>
                   <select
                     value={paymentType}
-                    onChange={(e) => setPaymentType(e.target.value)}
+                    onChange={(e) => handlePaymentTypeChange(e.target.value)}
                     className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-semibold"
                   >
-                    <option value="CASH">{language === 'bn' ? 'নগদ (CASH)' : 'Cash'}</option>
-                    <option value="CREDIT">{language === 'bn' ? 'বাকি (CREDIT)' : 'Credit'}</option>
-                    <option value="PARTIAL">{language === 'bn' ? 'আংশিক জমা' : 'Partial'}</option>
+                    <option value="CASH">{language === 'bn' ? '💵 সম্পূর্ণ নগদ (CASH)' : 'Cash (Full)'}</option>
+                    <option value="CREDIT">{language === 'bn' ? '📄 সম্পূর্ণ বাকি (CREDIT)' : 'Full Credit'}</option>
+                    <option value="PARTIAL">{language === 'bn' ? '💳 আংশিক জমা (PARTIAL)' : 'Partial Payment'}</option>
+                    <option value="BANK">{language === 'bn' ? '🏦 ব্যাংক জমা (BANK)' : 'Bank Deposit'}</option>
+                    <option value="MOBILE">{language === 'bn' ? '📱 মোবাইল ব্যাংকিং (bKash/Nagad)' : 'Mobile Banking'}</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="text-[11px] font-bold text-slate-300 block mb-1">
-                    {language === 'bn' ? 'নগদ জমা (Paid):' : 'Paid Amount:'}
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[11px] font-bold text-slate-300 flex items-center gap-1">
+                      <DollarSign className="w-3 h-3 text-emerald-400" />
+                      <span>{language === 'bn' ? 'নগদ জমা (Paid):' : 'Paid Amount:'}</span>
+                    </label>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setPaidAmount(grandTotal)}
+                        className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800 font-bold hover:bg-emerald-900 cursor-pointer"
+                      >
+                        {language === 'bn' ? 'পুরো' : 'Full'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPaidAmount(0)}
+                        className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 hover:bg-slate-700 cursor-pointer"
+                      >
+                        {language === 'bn' ? 'শূন্য' : '0'}
+                      </button>
+                    </div>
+                  </div>
                   <input
                     type="number"
                     min="0"
@@ -656,6 +791,30 @@ export const EditSalesInvoiceModal: React.FC<EditSalesInvoiceModalProps> = ({
                     className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-emerald-400 font-mono font-bold focus:outline-none focus:border-emerald-500"
                   />
                 </div>
+              </div>
+
+              {/* Target Cash Account / Drawer Dropdown (Admin Correction) */}
+              <div>
+                <label className="text-[11px] font-bold text-slate-300 flex items-center gap-1 mb-1">
+                  <Building className="w-3 h-3 text-sky-400" />
+                  <span>{language === 'bn' ? 'ক্যাশ জমা ড্রয়ার / হিসাব (Target Cash Account):' : 'Target Drawer / Account:'}</span>
+                </label>
+                <select
+                  value={targetCashAccount}
+                  onChange={(e) => setTargetCashAccount(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-sky-300 focus:outline-none focus:border-sky-500 font-semibold"
+                >
+                  <option value="CREATOR_DRAWER">{language === 'bn' ? `সেলার ক্যাশ ড্রয়ার (${salesPersonName || 'সেলার'})` : 'Seller Drawer'}</option>
+                  <option value="COUNTER_DRAWER">{language === 'bn' ? 'কাউন্টার ক্যাশ ড্রয়ার (Counter Drawer)' : 'Counter Drawer'}</option>
+                  <option value="DSR_DRAWER">{language === 'bn' ? 'ডিএসআর ফিল্ড ক্যাশ ড্রয়ার (DSR Drawer)' : 'DSR Drawer'}</option>
+                  <option value="ADMIN_VAULT">{language === 'bn' ? 'এডমিন মেইন ক্যাশ ভল্ট (Admin Main Vault)' : 'Admin Vault'}</option>
+                  <option value="BANK_ACCOUNT">{language === 'bn' ? 'ব্যাংক একাউন্ট (Bank Account)' : 'Bank Account'}</option>
+                </select>
+                <span className="text-[10px] text-slate-400 mt-0.5 block">
+                  {language === 'bn'
+                    ? 'ভুল ক্যাশ ড্রয়ারে টাকা জমা হলে এখান থেকে সঠিক ড্রয়ার বা ব্যাংক সিলেক্ট করুন।'
+                    : 'Select the right drawer or bank account to route the received cash.'}
+                </span>
               </div>
 
               <div>

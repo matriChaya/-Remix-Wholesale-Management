@@ -122,6 +122,10 @@ import {
   DualWriteOptions,
   DualWriteResult,
 } from '../services/dualSyncService';
+import {
+  generateDateBasedInvoiceNo,
+  generateDateBasedChallanNo,
+} from '../utils/invoiceNumberHelper';
 
 interface WholesaleContextType {
   language: Language;
@@ -7873,22 +7877,29 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       );
     }
 
-    // 3. Revert previous cash drawer if paid in cash
-    if (existingOrder.paidAmount && existingOrder.paidAmount > 0 && existingOrder.paymentMethod === 'Cash') {
-      const creatorRole = existingOrder.salesPersonRole || existingOrder.creatorRole;
-      if (creatorRole) {
-        setUsers((prev) => {
-          const updatedUsers = prev.map((u) => {
-            if (u.role === creatorRole) {
-              const newDrawer = (u.assignedCashDrawer || 0) - existingOrder.paidAmount;
-              saveToFirestoreDoc(COLLECTIONS.USERS, u.id, { ...u, assignedCashDrawer: newDrawer });
-              return { ...u, assignedCashDrawer: newDrawer };
-            }
-            return u;
+    // 3. Revert previous cash drawer / account if paid in cash
+    if (existingOrder.paidAmount && existingOrder.paidAmount > 0 && (existingOrder.paymentMethod === 'Cash' || existingOrder.paymentType === 'CASH' || existingOrder.paymentType === 'PARTIAL')) {
+      const prevTargetAccount = (existingOrder as any).targetCashAccount || 'CREATOR_DRAWER';
+      if (prevTargetAccount === 'ADMIN_VAULT') {
+        updateAdminCashVault(Math.max(0, cashAdmin - existingOrder.paidAmount), `ইনভয়েস #${existingOrder.invoiceNo} এডিটের কারণে পূর্বের ক্যাশ সমন্বয়`);
+      } else if (prevTargetAccount === 'BANK_ACCOUNT' || existingOrder.paymentMethod === 'Bank') {
+        updateBankBalance(Math.max(0, cashBank - existingOrder.paidAmount), `ইনভয়েস #${existingOrder.invoiceNo} এডিটের কারণে ব্যাংক ব্যালেন্স সমন্বয়`);
+      } else {
+        const creatorRole = existingOrder.salesPersonRole || existingOrder.creatorRole;
+        if (creatorRole) {
+          setUsers((prev) => {
+            const updatedUsers = prev.map((u) => {
+              if (u.role === creatorRole) {
+                const newDrawer = Math.max(0, (u.assignedCashDrawer || 0) - existingOrder.paidAmount);
+                saveToFirestoreDoc(COLLECTIONS.USERS, u.id, { ...u, assignedCashDrawer: newDrawer });
+                return { ...u, assignedCashDrawer: newDrawer };
+              }
+              return u;
+            });
+            localStorage.setItem('ws_users', JSON.stringify(updatedUsers));
+            return updatedUsers;
           });
-          localStorage.setItem('ws_users', JSON.stringify(updatedUsers));
-          return updatedUsers;
-        });
+        }
       }
     }
 
@@ -7970,9 +7981,22 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const totalCostAmount = updatedData.totalCostAmount !== undefined ? updatedData.totalCostAmount : netCostDelivered;
     const totalProfitAmount = updatedData.totalProfitAmount !== undefined ? updatedData.totalProfitAmount : Math.max(0, newTotalAmount - totalCostAmount);
 
+    // Check if date changed or invoice number needs auto-generation
+    const finalDate = (updatedData.date || existingOrder.date || getTodayDateString()).slice(0, 10);
+    const oldDate = (existingOrder.date || '').slice(0, 10);
+    let finalInvoiceNo = (updatedData.invoiceNo || updatedData.invoiceNumber || existingOrder.invoiceNo || existingOrder.invoiceNumber || '').trim();
+
+    // If date changed and caller didn't provide a custom invoice number, auto-generate sequential number (1, 2, 3...)
+    if (finalDate !== oldDate && (!updatedData.invoiceNo || updatedData.invoiceNo === existingOrder.invoiceNo)) {
+      finalInvoiceNo = generateDateBasedInvoiceNo(finalDate, orderId, orders);
+    }
+
     const mergedInvoice: OrderInvoice = {
       ...existingOrder,
       ...updatedData,
+      invoiceNo: finalInvoiceNo,
+      invoiceNumber: finalInvoiceNo,
+      date: finalDate,
       items: enrichedItems,
       subtotal: newSubtotal,
       discountAmount: newDiscount,
@@ -7988,6 +8012,7 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       paidAmount: newPaidAmount,
       dueAmount: newDueAmount,
       paymentMethod: newPaymentMethod,
+      targetCashAccount: updatedData.targetCashAccount || (existingOrder as any).targetCashAccount || 'CREATOR_DRAWER',
     };
 
     // 5. Apply new stock impacts: deduct new sold items (-), add new market reflex items (+)
@@ -8030,13 +8055,23 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       );
     }
 
-    // 7. Apply new cash drawer if paid in cash
-    if (newPaidAmount > 0 && newPaymentMethod === 'Cash') {
-      const creatorRole = mergedInvoice.salesPersonRole || mergedInvoice.creatorRole;
-      if (creatorRole) {
+    // 7. Apply new cash drawer / account if paid in cash
+    if (newPaidAmount > 0 && (newPaymentMethod === 'Cash' || mergedInvoice.paymentType === 'CASH' || mergedInvoice.paymentType === 'PARTIAL')) {
+      const targetAccount = updatedData.targetCashAccount || (mergedInvoice as any).targetCashAccount || 'CREATOR_DRAWER';
+      if (targetAccount === 'ADMIN_VAULT') {
+        updateAdminCashVault(cashAdmin + newPaidAmount, `সংশোধিত ইনভয়েস #${mergedInvoice.invoiceNo} ক্যাশ জমা`);
+      } else if (targetAccount === 'BANK_ACCOUNT' || newPaymentMethod === 'Bank') {
+        updateBankBalance(cashBank + newPaidAmount, `সংশোধিত ইনভয়েস #${mergedInvoice.invoiceNo} ব্যাংক জমা`);
+      } else if (targetAccount === 'COUNTER_DRAWER') {
+        updateCounterCash(cashCounter + newPaidAmount, `সংশোধিত ইনভয়েস #${mergedInvoice.invoiceNo} কাউন্টার ক্যাশ জমা`);
+      } else if (targetAccount === 'DSR_DRAWER') {
+        updateDsrCash(cashDSR + newPaidAmount, `সংশোধিত ইনভয়েস #${mergedInvoice.invoiceNo} ডিএসআর ক্যাশ জমা`);
+      } else {
+        // Default: Creator / Selected Sales Person's Drawer
+        const targetRole = mergedInvoice.salesPersonRole || mergedInvoice.creatorRole || 'counter';
         setUsers((prev) => {
           const updatedUsers = prev.map((u) => {
-            if (u.role === creatorRole) {
+            if (u.role === targetRole || (mergedInvoice.salesPersonId && u.id === mergedInvoice.salesPersonId)) {
               const newDrawer = (u.assignedCashDrawer || 0) + newPaidAmount;
               saveToFirestoreDoc(COLLECTIONS.USERS, u.id, { ...u, assignedCashDrawer: newDrawer });
               return { ...u, assignedCashDrawer: newDrawer };
@@ -8438,7 +8473,14 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     const newTotalAmount = cleanItems.reduce((acc, it) => acc + it.totalPrice, 0);
     const oldTotalAmount = oldEntry.amount || 0;
     const oldRefNo = (oldEntry.referenceNo || '').trim();
-    const newRefNo = (params.referenceNo || '').trim() || oldRefNo;
+    const oldDate = (oldEntry.date || '').slice(0, 10);
+    const newDate = (params.date || getTodayDateString()).slice(0, 10);
+    let newRefNo = (params.referenceNo || '').trim() || oldRefNo;
+
+    // Auto-generate date-based sequential challan number if date changed (CHAL-YYYYMMDD-1, CHAL-YYYYMMDD-2...)
+    if (newDate !== oldDate && (!params.referenceNo || params.referenceNo === oldRefNo)) {
+      newRefNo = generateDateBasedChallanNo(newDate, params.entryId, supplierLedger);
+    }
 
     // 1. Reconcile Products Stock
     const oldItemQtyMap = new Map<string, number>();
@@ -8616,12 +8658,29 @@ export const WholesaleProvider: React.FC<{ children: React.ReactNode }> = ({ chi
       items: cleanItems,
     };
 
+    // 4. Reconcile Cash Drawer if paid in cash
+    const wasPaidInCash = oldEntry.paymentMethod === 'Cash';
+    const isNowPaidInCash = params.paymentMethod === 'Cash' || params.paymentStatus === 'Paid';
+    if (wasPaidInCash && !isNowPaidInCash) {
+      updateAdminCashVault(cashAdmin + oldTotalAmount, `চালান #${newRefNo} বাকিতে পরিবর্তনের কারণে পূর্বের ক্যাশ ফেরত`);
+    } else if (!wasPaidInCash && isNowPaidInCash) {
+      updateAdminCashVault(Math.max(0, cashAdmin - newTotalAmount), `চালান #${newRefNo} নগদ পরিশোধের কারণে ক্যাশ কর্তন`);
+    } else if (wasPaidInCash && isNowPaidInCash && newTotalAmount !== oldTotalAmount) {
+      const cashDiff = newTotalAmount - oldTotalAmount;
+      updateAdminCashVault(Math.max(0, cashAdmin - cashDiff), `চালান #${newRefNo} সংশোধিত মূল্যের ক্যাশ সমন্বয়`);
+    }
+
     setSupplierLedger((prev) => {
       const next = prev.map((e) => (e.id === params.entryId ? updatedEntry : e));
       localStorage.setItem('ws_supplier_ledger', JSON.stringify(next));
       return next;
     });
     saveToFirestoreDoc(COLLECTIONS.SUPPLIER_LEDGER, updatedEntry.id, updatedEntry);
+    dualWriteData('supplierLedger', updatedEntry, {
+      docId: updatedEntry.id,
+      adminPhone: currentUser?.adminPhone || currentUser?.phone || '01937200635',
+      updatedBy: currentUser?.name || 'Admin',
+    }).catch(() => {});
 
     addActivityLog({
       actionType: 'STOCK_INWARD',
