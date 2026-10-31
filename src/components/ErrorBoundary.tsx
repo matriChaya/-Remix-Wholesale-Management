@@ -62,6 +62,11 @@ export class ErrorBoundary extends React.Component<Props, State> {
         return this.props.fallback;
       }
 
+      const isDynamicImportError =
+        this.state.error?.message?.toLowerCase().includes('failed to fetch dynamically imported module') ||
+        this.state.error?.message?.toLowerCase().includes('error loading dynamically imported module') ||
+        this.state.error?.message?.toLowerCase().includes('loading chunk');
+
       const isQuotaOrDbError =
         this.state.error?.message?.toLowerCase().includes('quota') ||
         this.state.error?.message?.toLowerCase().includes('resource-exhausted') ||
@@ -80,10 +85,12 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
             <div className="space-y-2">
               <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-                সিস্টেম সুরক্ষিত রয়েছে (Safe Mode)
+                {isDynamicImportError ? 'অ্যাপ্লিকেশন লোডিং সমন্বয় (App Refresh)' : 'সিস্টেম সুরক্ষিত রয়েছে (Safe Mode)'}
               </h1>
               <p className="text-sm text-slate-400 leading-relaxed max-w-md mx-auto">
-                {isQuotaOrDbError
+                {isDynamicImportError
+                  ? 'নতুন মডিউল বা কোড আপডেট হওয়ার কারণে ব্রাউজার ক্যাশ রিফ্রেশ করা প্রয়োজন। আপনার সকল ডাটা সম্পূর্ণ অক্ষত আছে।'
+                  : isQuotaOrDbError
                   ? 'ডাটাবেজ সার্ভার সংযোগে সাময়িক বিলম্ব বা কোটা সীমা দেখা গেছে। আপনার সকল বিক্রয় ও হিসাবের ডাটা লোকাল ডিভাইসে সুরক্ষিত আছে।'
                   : 'একটি অপ্রত্যাশিত ত্রুটি ঘটেছে, তবে আপনার ব্যবসার ডাটা সুরক্ষিত রয়েছে। অ্যাপটি পুনরায় সচল করতে নিচের বাটনে চাপ দিন।'}
               </p>

@@ -14,5 +14,21 @@
     "appVersion": "3.0.0",
     "pendingFilesCount": 0,
     "pendingItems": []
+  },
+  {
+    "deviceId": "dev_mobile_mve09neo_ld3cc",
+    "adminPhone": "01937200635",
+    "role": "admin",
+    "phone": "01937200635",
+    "name": "মাতৃছায়া টেলিকম",
+    "deviceType": "স্মার্টফোন (মোবাইল অ্যাপ)",
+    "userAgent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36",
+    "firstInstalledAt": "2026-10-30T15:20:50.769Z",
+    "lastSeenAt": "2026-10-30T15:31:57.446Z",
+    "lastHeartbeatMs": 1793374317446,
+    "ip": "2404:1c40:1d3:8c3a:a938:4be:2c0c:1ae, 169.254.169.126",
+    "appVersion": "3.0.0",
+    "pendingFilesCount": 0,
+    "pendingItems": []
   }
 ]

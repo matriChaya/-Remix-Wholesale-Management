@@ -1,6 +1,7 @@
-import React, { useState, Suspense, lazy } from 'react';
+import React, { useState, useEffect } from 'react';
 import { WholesaleProvider, useWholesale } from './context/WholesaleContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { ModalErrorBoundary } from './components/ModalErrorBoundary';
 import { translations } from './utils/translations';
 import { AndroidHeader } from './components/AndroidHeader';
 import { BiometricLockOverlay } from './components/BiometricLockOverlay';
@@ -20,32 +21,32 @@ import { MobilePWAInstallBanner } from './components/MobilePWAInstallBanner';
 import { useAppUpdate } from './utils/appUpdate';
 import { PdfDocumentResult } from './utils/pdfExport';
 
-// Code-split heavy modals to ensure sub-100ms ultra-fast application startup
-const RoleSelectorModal = lazy(() => import('./components/RoleSelectorModal').then(m => ({ default: m.RoleSelectorModal })));
-const ScannerModal = lazy(() => import('./components/ScannerModal').then(m => ({ default: m.ScannerModal })));
-const PhonebookPickerModal = lazy(() => import('./components/PhonebookPickerModal').then(m => ({ default: m.PhonebookPickerModal })));
-const CashTransferModal = lazy(() => import('./components/CashTransferModal').then(m => ({ default: m.CashTransferModal })));
-const BiometricSettingsModal = lazy(() => import('./components/BiometricSettingsModal').then(m => ({ default: m.BiometricSettingsModal })));
-const AdminRefSwitcherModal = lazy(() => import('./components/AdminRefSwitcherModal').then(m => ({ default: m.AdminRefSwitcherModal })));
-const AdminInvestModal = lazy(() => import('./components/AdminInvestModal').then(m => ({ default: m.AdminInvestModal })));
-const AdminCompanyPaymentModal = lazy(() => import('./components/AdminCompanyPaymentModal').then(m => ({ default: m.AdminCompanyPaymentModal })));
-const PayAdminModal = lazy(() => import('./components/PayAdminModal').then(m => ({ default: m.PayAdminModal })));
-const AddSupplierModal = lazy(() => import('./components/AddSupplierModal').then(m => ({ default: m.AddSupplierModal })));
-const EditBalanceModal = lazy(() => import('./components/EditBalanceModal').then(m => ({ default: m.EditBalanceModal })));
-const StaffManagementModal = lazy(() => import('./components/StaffManagementModal').then(m => ({ default: m.StaffManagementModal })));
-const MultiDeviceStaffSyncModal = lazy(() => import('./components/MultiDeviceStaffSyncModal').then(m => ({ default: m.MultiDeviceStaffSyncModal })));
-const SystemResetModal = lazy(() => import('./components/SystemResetModal').then(m => ({ default: m.SystemResetModal })));
-const InstallGuideModal = lazy(() => import('./components/InstallGuideModal').then(m => ({ default: m.InstallGuideModal })));
-const BackupSyncModal = lazy(() => import('./components/BackupSyncModal').then(m => ({ default: m.BackupSyncModal })));
-const ConnectedDevicesFleetModal = lazy(() => import('./components/ConnectedDevicesFleetModal').then(m => ({ default: m.ConnectedDevicesFleetModal })));
-const AllStatementsModal = lazy(() => import('./components/AllStatementsModal').then(m => ({ default: m.AllStatementsModal })));
-const PdfPreviewModal = lazy(() => import('./components/PdfPreviewModal').then(m => ({ default: m.PdfPreviewModal })));
-const BusinessProfileModal = lazy(() => import('./components/BusinessProfileModal').then(m => ({ default: m.BusinessProfileModal })));
-const MemoKhataScannerModal = lazy(() => import('./components/MemoKhataScannerModal').then(m => ({ default: m.MemoKhataScannerModal })));
-const AppUpdateModal = lazy(() => import('./components/AppUpdateModal').then(m => ({ default: m.AppUpdateModal })));
-const CashDrawerStatementModal = lazy(() => import('./components/CashDrawerStatementModal').then(m => ({ default: m.CashDrawerStatementModal })));
-const ExpenseModal = lazy(() => import('./components/ExpenseModal').then(m => ({ default: m.ExpenseModal })));
-const SupabaseSyncModal = lazy(() => import('./components/SupabaseSyncModal').then(m => ({ default: m.SupabaseSyncModal })));
+// Modal Components (Direct static imports ensure unified single React instance and 0ms offline opening)
+import { RoleSelectorModal } from './components/RoleSelectorModal';
+import { ScannerModal } from './components/ScannerModal';
+import { PhonebookPickerModal } from './components/PhonebookPickerModal';
+import { CashTransferModal } from './components/CashTransferModal';
+import { BiometricSettingsModal } from './components/BiometricSettingsModal';
+import { AdminRefSwitcherModal } from './components/AdminRefSwitcherModal';
+import { AdminInvestModal } from './components/AdminInvestModal';
+import { AdminCompanyPaymentModal } from './components/AdminCompanyPaymentModal';
+import { PayAdminModal } from './components/PayAdminModal';
+import { AddSupplierModal } from './components/AddSupplierModal';
+import { EditBalanceModal } from './components/EditBalanceModal';
+import { StaffManagementModal } from './components/StaffManagementModal';
+import { MultiDeviceStaffSyncModal } from './components/MultiDeviceStaffSyncModal';
+import { SystemResetModal } from './components/SystemResetModal';
+import { InstallGuideModal } from './components/InstallGuideModal';
+import { BackupSyncModal } from './components/BackupSyncModal';
+import { ConnectedDevicesFleetModal } from './components/ConnectedDevicesFleetModal';
+import { AllStatementsModal } from './components/AllStatementsModal';
+import { PdfPreviewModal } from './components/PdfPreviewModal';
+import { BusinessProfileModal } from './components/BusinessProfileModal';
+import { MemoKhataScannerModal } from './components/MemoKhataScannerModal';
+import { AppUpdateModal } from './components/AppUpdateModal';
+import { CashDrawerStatementModal } from './components/CashDrawerStatementModal';
+import { ExpenseModal } from './components/ExpenseModal';
+import { SupabaseSyncModal } from './components/SupabaseSyncModal';
 import {
   LayoutDashboard,
   ShoppingCart,
@@ -469,8 +470,20 @@ function MainAppContent() {
         )}
       </div>
 
-      {/* Global Modals - Rendered on-demand via Suspense */}
-      <Suspense fallback={null}>
+      {/* Global Modals - Rendered on-demand via Suspense & Isolated ModalErrorBoundary */}
+      <ModalErrorBoundary
+        onReset={() => {
+          setIsRoleModalOpen(false);
+          setIsScannerModalOpen(false);
+          setIsPhonebookModalOpen(false);
+          setIsCashTransferModalOpen(false);
+          setIsInstallModalOpen(false);
+          setIsAllStatementsOpen(false);
+          setIsCashDrawerStatementOpen(false);
+          setIsUpdateModalOpen(false);
+          setPdfPreviewResult(null);
+        }}
+      >
         {isRoleModalOpen && (
           <RoleSelectorModal
             isOpen={isRoleModalOpen}
@@ -647,13 +660,11 @@ function MainAppContent() {
 
         {/* Supabase PostgreSQL & Realtime Multi-Device Hub Modal */}
         {isSupabaseModalOpen && (
-          <Suspense fallback={null}>
-            <SupabaseSyncModal
-              isOpen={isSupabaseModalOpen}
-              onClose={closeSupabaseModal}
-              initialTab={supabaseModalInitialTab}
-            />
-          </Suspense>
+          <SupabaseSyncModal
+            isOpen={isSupabaseModalOpen}
+            onClose={closeSupabaseModal}
+            initialTab={supabaseModalInitialTab}
+          />
         )}
 
         {/* Official Company Profile, Warehouse & Letterhead Settings Modal */}
@@ -691,7 +702,7 @@ function MainAppContent() {
             onClose={() => setPdfPreviewResult(null)}
           />
         )}
-      </Suspense>
+      </ModalErrorBoundary>
 
       {/* Biometric & PIN Security Lock Screen (App Open Protection) */}
       {isBiometricLocked && (

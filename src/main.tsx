@@ -23,41 +23,52 @@ window.addEventListener('unhandledrejection', (event) => {
   }
 });
 
-// Register Service Worker for offline persistence, background sync & PWA installation
+// Service Worker lifecycle: in development mode, unregister and clear caches to prevent stale chunk collisions
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker
-      .register('/sw.js')
-      .then((reg) => {
-        // Automatically check for new updates from server whenever opened
-        reg.update().catch(() => {});
-
-        // Listen for new worker installation
-        reg.addEventListener('updatefound', () => {
-          const newWorker = reg.installing;
-          if (newWorker) {
-            newWorker.addEventListener('statechange', () => {
-              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                console.log('New app version detected, reloading to apply updates...');
-                window.location.reload();
-              }
-            });
-          }
-        });
-      })
-      .catch((err) => {
-        console.debug('Service Worker registration note:', err);
+  if (import.meta.env.DEV) {
+    navigator.serviceWorker.getRegistrations().then((registrations) => {
+      for (const registration of registrations) {
+        registration.unregister();
+      }
+    });
+    if ('caches' in window) {
+      caches.keys().then((names) => {
+        for (const name of names) {
+          caches.delete(name);
+        }
       });
-  });
-
-  // Reload when controller changes
-  let refreshing = false;
-  navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (!refreshing) {
-      refreshing = true;
-      window.location.reload();
     }
-  });
+  } else {
+    // Production Service Worker for offline persistence & PWA installation
+    window.addEventListener('load', () => {
+      navigator.serviceWorker
+        .register('/sw.js')
+        .then((reg) => {
+          reg.update().catch(() => {});
+          reg.addEventListener('updatefound', () => {
+            const newWorker = reg.installing;
+            if (newWorker) {
+              newWorker.addEventListener('statechange', () => {
+                if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                  window.location.reload();
+                }
+              });
+            }
+          });
+        })
+        .catch((err) => {
+          console.debug('Service Worker registration note:', err);
+        });
+    });
+
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!refreshing) {
+        refreshing = true;
+        window.location.reload();
+      }
+    });
+  }
 }
 
 createRoot(document.getElementById('root')!).render(

@@ -1416,3 +1416,5 @@ export const MemoKhataScannerModal: React.FC<MemoKhataScannerModalProps> = ({
     </div>
   );
 };
+
+export default MemoKhataScannerModal;

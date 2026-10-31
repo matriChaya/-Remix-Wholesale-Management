@@ -2556,3 +2556,5 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({ isOpen, onClose }) =
     </div>
   );
 };
+
+export default ScannerModal;

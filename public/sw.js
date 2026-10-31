@@ -36,6 +36,15 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
+  // Always bypass caching completely for AI Studio dev environment and localhost
+  if (
+    url.hostname.includes('ais-dev-') ||
+    url.hostname.includes('localhost') ||
+    url.hostname.includes('127.0.0.1')
+  ) {
+    return;
+  }
+
   // Skip external Google API endpoints so IndexedDB Firestore handles its own offline cache
   if (
     url.hostname.includes('firestore.googleapis.com') ||
