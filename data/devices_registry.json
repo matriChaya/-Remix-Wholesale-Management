@@ -24,9 +24,9 @@
     "deviceType": "স্মার্টফোন (মোবাইল অ্যাপ)",
     "userAgent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Mobile Safari/537.36",
     "firstInstalledAt": "2026-10-30T15:20:50.769Z",
-    "lastSeenAt": "2026-10-30T15:31:57.446Z",
-    "lastHeartbeatMs": 1793374317446,
-    "ip": "2404:1c40:1d3:8c3a:a938:4be:2c0c:1ae, 169.254.169.126",
+    "lastSeenAt": "2026-10-31T07:41:41.560Z",
+    "lastHeartbeatMs": 1793432501560,
+    "ip": "2404:1c40:1b1:5707:3c50:f134:fbba:4bd4, 169.254.169.126",
     "appVersion": "3.0.0",
     "pendingFilesCount": 0,
     "pendingItems": []

@@ -140,7 +140,7 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({ isOpen, onClose }) =
     reader.onload = (e) => {
       const img = new Image();
       img.onload = () => {
-        const maxDimension = 2048;
+        const maxDimension = 1280;
         let width = img.width;
         let height = img.height;
 
@@ -160,7 +160,7 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({ isOpen, onClose }) =
         const ctx = canvas.getContext('2d');
         if (ctx) {
           ctx.drawImage(img, 0, 0, width, height);
-          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.92);
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
           setImagePreview(compressedDataUrl);
           stopCamera();
           processReceiptWithGemini(compressedDataUrl);

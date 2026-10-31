@@ -1041,13 +1041,12 @@ RULES FOR ACCURACY:
     let scanSource = "";
     let lastError: any = null;
 
-    // Supported models based on official SDK guidance
+    // Supported fast and accurate vision models based on official SDK guidance
     const candidateModels = [
-      "gemini-3.8-flash",
-      "gemini-flash-latest",
-      "gemini-3.6-flash",
+      "gemini-flash-lite-latest",
       "gemini-3.1-flash-lite",
-      "gemini-3.1-pro-preview"
+      "gemini-3.5-flash",
+      "gemini-flash-latest"
     ];
     const ai = getGenAI();
 
@@ -1055,7 +1054,11 @@ RULES FOR ACCURACY:
     for (const modelName of candidateModels) {
       if (extractedData) break;
       try {
-        const response = await ai.models.generateContent({
+        const timeoutPromise = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`Timeout on model ${modelName}`)), 15000)
+        );
+
+        const responsePromise = ai.models.generateContent({
           model: modelName,
           contents: {
             parts: [
@@ -1098,7 +1101,6 @@ RULES FOR ACCURACY:
                       suggestedRetailPrice: { type: Type.NUMBER, description: "Suggested retail selling price" },
                       totalPrice: { type: Type.NUMBER, description: "Total line price in BDT" },
                     },
-                    required: ["name", "quantity", "costPrice", "totalPrice"],
                   },
                 },
                 replacementItems: {
@@ -1113,7 +1115,6 @@ RULES FOR ACCURACY:
                       reason: { type: Type.STRING, description: "Defect or return reason" },
                       value: { type: Type.NUMBER, description: "Value or adjustment amount in BDT" },
                     },
-                    required: ["name", "quantity"],
                   },
                 },
                 replacementDeduction: { type: Type.NUMBER, description: "Total deduction value for replacement items" },
@@ -1127,10 +1128,11 @@ RULES FOR ACCURACY:
                 paymentMethod: { type: Type.STRING },
                 notes: { type: Type.STRING },
               },
-              required: ["items"],
             },
           },
         });
+
+        const response = await Promise.race([responsePromise, timeoutPromise]);
 
         const responseText = response.text || "{}";
         let parsed: any = null;
@@ -1242,7 +1244,7 @@ RULES FOR ACCURACY:
 
     // Pass 2: If structured schema failed, try direct unstructured text extraction & JSON markdown parsing
     if (!extractedData) {
-      for (const fallbackModel of ["gemini-3.8-flash", "gemini-flash-latest", "gemini-3.6-flash", "gemini-3.1-flash-lite"]) {
+      for (const fallbackModel of ["gemini-flash-lite-latest", "gemini-3.1-flash-lite", "gemini-3.5-flash"]) {
         if (extractedData) break;
         try {
           const fallbackPrompt = `Examine this invoice/challan image. Transcribe all table rows and details. Output a JSON object in this format:
@@ -1266,7 +1268,11 @@ RULES FOR ACCURACY:
 }
 \`\`\``;
 
-          const response = await ai.models.generateContent({
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(`Pass 2 Timeout on model ${fallbackModel}`)), 12000)
+          );
+
+          const responsePromise = ai.models.generateContent({
             model: fallbackModel,
             contents: {
               parts: [
@@ -1280,6 +1286,8 @@ RULES FOR ACCURACY:
               ],
             },
           });
+
+          const response = await Promise.race([responsePromise, timeoutPromise]);
 
           const text = response.text || "";
           const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/) || text.match(/\{[\s\S]*\}/);
@@ -1380,37 +1388,43 @@ RULES FOR ACCURACY:
       });
     }
 
-    // For real user photos where OCR encountered blurry or unreadable lines:
+    // If image could not be parsed by any model (e.g. blurry/blank photo):
     const nowStr = getBangladeshTodayDateString();
+    const isSale = targetDocType === "SALE" || targetDocType === "SALE_WITH_REPLACEMENT";
     return res.json({
       success: true,
       data: {
-        supplierName: "সাপ্লায়ার কোম্পানি / Supplier",
+        docType: targetDocType || "PURCHASE",
+        supplierName: isSale ? "" : "",
+        customerName: isSale ? "" : "",
+        retailerName: isSale ? "" : "",
         supplierContact: "",
-        invoiceNumber: `INV-${Date.now().toString().slice(-6)}`,
+        invoiceNumber: `${isSale ? 'SALE' : 'INV'}-${Date.now().toString().slice(-6)}`,
         invoiceDate: nowStr,
         items: [
           {
-            name: "পণ্য আইটেম ১",
+            name: "",
             sku: `SKU-${Date.now().toString().slice(-4)}`,
             category: "General Wholesale",
-            quantity: 10,
+            quantity: 1,
             unit: "Pcs",
-            costPrice: 100,
-            suggestedRetailPrice: 120,
-            totalPrice: 1000,
+            costPrice: 0,
+            suggestedRetailPrice: 0,
+            totalPrice: 0,
           }
         ],
-        subtotal: 1000,
+        subtotal: 0,
         discount: 0,
         tax: 0,
-        totalAmount: 1000,
+        totalAmount: 0,
+        paidAmount: 0,
+        dueAmount: 0,
         paymentStatus: "Unpaid",
-        paymentMethod: "Credit",
+        paymentMethod: isSale ? "Cash" : "Credit",
         notes: "",
         requiresManualInput: true,
       },
-      warning: "ছবি থেকে স্বয়ংক্রিয় টেক্সট স্ক্যান করতে কিছুটা অস্পষ্টতা ছিল। আপনার ছবির তথ্য দেখে নিচের তালিকায় নাম, পরিমাণ ও দর ঠিক করে সেভ করুন।",
+      warning: "ছবি থেকে সরাসরি পড়ার সময় কিছু অস্পষ্টতা ছিল। অনুগ্রহ করে ছবির সাথে মিলিয়ে পণ্যের নাম ও দর লিখুন।",
       source: "manual-assistant",
     });
   } catch (error: any) {
