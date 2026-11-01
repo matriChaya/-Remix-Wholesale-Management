@@ -1002,37 +1002,39 @@ RULES FOR ACCURACY:
     if (!process.env.GEMINI_API_KEY) {
       console.warn("GEMINI_API_KEY is not configured in server environment.");
       const nowStr = getBangladeshTodayDateString();
+      const isSale = targetDocType === "SALE" || targetDocType === "SALE_WITH_REPLACEMENT";
       return res.json({
         success: true,
         data: {
-          supplierName: targetDocType === 'SALE' || targetDocType === 'SALE_WITH_REPLACEMENT' ? "" : "সাপ্লায়ার কোম্পানি / Supplier",
-          retailerName: targetDocType === 'SALE' || targetDocType === 'SALE_WITH_REPLACEMENT' ? "নগদ ক্রেতা / দোকানদার" : "",
+          docType: targetDocType || "PURCHASE",
+          supplierName: isSale ? "" : "",
+          retailerName: isSale ? "" : "",
+          customerName: isSale ? "" : "",
           supplierContact: "",
-          invoiceNumber: `${targetDocType === 'SALE' ? 'CTR' : 'INV'}-${Date.now().toString().slice(-6)}`,
+          invoiceNumber: `${isSale ? 'SALE' : 'INV'}-${Date.now().toString().slice(-6)}`,
           invoiceDate: nowStr,
-          docType: targetDocType || 'PURCHASE',
           items: [
             {
-              name: "পণ্য আইটেম ১",
+              name: "",
               sku: `SKU-${Date.now().toString().slice(-4)}`,
               category: "General Wholesale",
               quantity: 1,
               unit: "Pcs",
-              costPrice: 100,
-              suggestedRetailPrice: 120,
-              totalPrice: 100,
+              costPrice: 0,
+              suggestedRetailPrice: 0,
+              totalPrice: 0,
             }
           ],
-          subtotal: 100,
+          subtotal: 0,
           discount: 0,
           tax: 0,
-          totalAmount: 100,
+          totalAmount: 0,
           paymentStatus: "Unpaid",
-          paymentMethod: "Credit",
+          paymentMethod: isSale ? "Cash" : "Credit",
           notes: "",
           requiresManualInput: true,
         },
-        warning: "ছবি থেকে তথ্য রিড করতে এআই কী কনফিগার করা নেই। আপনার ছবির তথ্য দেখে নাম ও দর পূরণ করুন।",
+        warning: "সার্ভারে GEMINI_API_KEY কনফিগার করা নেই। Render Environment-এ GEMINI_API_KEY এনভায়রনমেন্ট ভ্যারিয়েবল যোগ করুন।",
         source: "manual-assistant",
       });
     }

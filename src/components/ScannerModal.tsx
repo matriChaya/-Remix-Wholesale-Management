@@ -1411,24 +1411,49 @@ export const ScannerModal: React.FC<ScannerModalProps> = ({ isOpen, onClose }) =
           {/* Extracted Stock Data Results */}
           {extractedResult && !isScanning && (
             <div className="space-y-3.5 animate-in fade-in duration-200">
-              <div className="p-3 rounded-xl bg-emerald-950/30 border border-emerald-500/30 flex items-center justify-between">
-                <div className="flex items-center gap-2 text-emerald-400 text-xs font-semibold">
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>{t.extractSuccess}</span>
+              {extractedResult.requiresManualInput ? (
+                <div className="p-3 rounded-xl bg-amber-950/40 border border-amber-500/40 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-amber-300 text-xs font-medium">
+                    <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>
+                      {language === 'bn'
+                        ? 'ছবি অস্পষ্ট বা AI রিডিং অসম্পূর্ণ হওয়ায় তথ্যগুলো সরাসরি সম্পাদনাযোগ্য রাখা হয়েছে। নিচে মিলিয়ে নিন।'
+                        : 'Could not auto-extract all text. Manual edit mode enabled for item names and rates.'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImagePreview(null);
+                      setExtractedResult(null);
+                      setErrorMsg(null);
+                      setWarningMsg(null);
+                    }}
+                    className="text-[11px] text-slate-400 hover:text-slate-200 underline shrink-0"
+                  >
+                    {language === 'bn' ? 'পুনরায় চেষ্টা' : 'Retry Scan'}
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setImagePreview(null);
-                    setExtractedResult(null);
-                    setErrorMsg(null);
-                    setWarningMsg(null);
-                  }}
-                  className="text-[11px] text-slate-400 hover:text-slate-200 underline"
-                >
-                  {language === 'bn' ? 'পুনরায় স্ক্যান বা নতুন চালান' : 'Scan another invoice'}
-                </button>
-              </div>
+              ) : (
+                <div className="p-3 rounded-xl bg-emerald-950/30 border border-emerald-500/30 flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-emerald-400 text-xs font-semibold">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <span>{t.extractSuccess}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setImagePreview(null);
+                      setExtractedResult(null);
+                      setErrorMsg(null);
+                      setWarningMsg(null);
+                    }}
+                    className="text-[11px] text-slate-400 hover:text-slate-200 underline shrink-0"
+                  >
+                    {language === 'bn' ? 'পুনরায় স্ক্যান বা নতুন চালান' : 'Scan another invoice'}
+                  </button>
+                </div>
+              )}
 
               {/* Image Preview Thumbnail & Expandable Inspector */}
               {imagePreview && (
