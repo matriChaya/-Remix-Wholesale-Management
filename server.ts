@@ -22,21 +22,34 @@ try {
   console.warn("Could not create backup directory:", err);
 }
 
-// Lazy Google Gen AI
-let aiClient: GoogleGenAI | null = null;
-function getGenAI(): GoogleGenAI {
-  if (!aiClient) {
-    const apiKey = process.env.GEMINI_API_KEY || "";
-    aiClient = new GoogleGenAI({
-      apiKey: apiKey,
-      httpOptions: {
-        headers: {
-          "User-Agent": "aistudio-build",
-        },
-      },
-    });
+// Multi API Key Provider with Automatic Fallback & Rotation
+function getGenAIInstances(): { keyName: string; client: GoogleGenAI }[] {
+  const envKeys = [
+    { name: "GEMINI_API_KEY", key: process.env.GEMINI_API_KEY },
+    { name: "GEMINI_API_KEY_2", key: process.env.GEMINI_API_KEY_2 },
+    { name: "GEMINI_API_KEY_3", key: process.env.GEMINI_API_KEY_3 },
+    { name: "GEMINI_API_KEY_PRIMARY", key: process.env.GEMINI_API_KEY_PRIMARY },
+  ];
+
+  const validKeys = envKeys.filter((k) => k.key && k.key.trim().length > 0);
+
+  if (validKeys.length === 0) {
+    return [{
+      keyName: "GEMINI_API_KEY",
+      client: new GoogleGenAI({
+        apiKey: "",
+        httpOptions: { headers: { "User-Agent": "aistudio-build" } },
+      }),
+    }];
   }
-  return aiClient;
+
+  return validKeys.map((k) => ({
+    keyName: k.name,
+    client: new GoogleGenAI({
+      apiKey: k.key!.trim(),
+      httpOptions: { headers: { "User-Agent": "aistudio-build" } },
+    }),
+  }));
 }
 
 // API Health Check (supports standard Cloud Run & Kubernetes probes)
@@ -1050,206 +1063,211 @@ RULES FOR ACCURACY:
       "gemini-3.5-flash",
       "gemini-flash-latest"
     ];
-    const ai = getGenAI();
+    const aiInstances = getGenAIInstances();
 
-    // Pass 1: Try structured output generation with candidate models
-    for (const modelName of candidateModels) {
+    // Pass 1: Try structured output generation across configured API Keys and Model Candidates
+    for (const { keyName, client: ai } of aiInstances) {
       if (extractedData) break;
-      try {
-        const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error(`Timeout on model ${modelName}`)), 15000)
-        );
+      for (const modelName of candidateModels) {
+        if (extractedData) break;
+        try {
+          const timeoutPromise = new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(`Timeout on model ${modelName} (${keyName})`)), 15000)
+          );
 
-        const responsePromise = ai.models.generateContent({
-          model: modelName,
-          contents: {
-            parts: [
-              {
-                inlineData: {
-                  mimeType: detectedMime,
-                  data: cleanBase64,
-                },
-              },
-              { text: prompt },
-            ],
-          },
-          config: {
-            systemInstruction,
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                docType: { type: Type.STRING, description: "PURCHASE or SALE or REPLACEMENT_RETURN or SALE_WITH_REPLACEMENT" },
-                supplierName: { type: Type.STRING, description: "Supplier or company name" },
-                retailerName: { type: Type.STRING, description: "Retailer, shop, or customer name" },
-                supplierContact: { type: Type.STRING, description: "Supplier or customer contact phone" },
-                invoiceNumber: { type: Type.STRING, description: "Invoice, Challan, or Memo number" },
-                previousDoNo: { type: Type.STRING, description: "Previous D.O. Number (পূর্বের ডিও নং) if printed or referenced" },
-                previousDoDate: { type: Type.STRING, description: "Previous D.O. Date (পূর্বের ডিও তারিখ) in YYYY-MM-DD if printed" },
-                invoiceDate: { type: Type.STRING, description: "Invoice date in YYYY-MM-DD" },
-                replacementReason: { type: Type.STRING, description: "Reason if replacement/return slip (e.g. EXPIRED, DAMAGED_PACKAGING, LEAKAGE_BROKEN, OTHER)" },
-                items: {
-                  type: Type.ARRAY,
-                  description: "List of all product items in the invoice table",
-                  items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      name: { type: Type.STRING, description: "Full product name as written" },
-                      sku: { type: Type.STRING, description: "Product code or SKU if available" },
-                      category: { type: Type.STRING, description: "Product category" },
-                      quantity: { type: Type.NUMBER, description: "Quantity" },
-                      unit: { type: Type.STRING, description: "Unit of measurement (Pcs, Box, Ctn, Bag, Kg, Ltr, Dzn)" },
-                      costPrice: { type: Type.NUMBER, description: "Purchase or selling price per unit in BDT" },
-                      suggestedRetailPrice: { type: Type.NUMBER, description: "Suggested retail selling price" },
-                      totalPrice: { type: Type.NUMBER, description: "Total line price in BDT" },
-                    },
+          const responsePromise = ai.models.generateContent({
+            model: modelName,
+            contents: {
+              parts: [
+                {
+                  inlineData: {
+                    mimeType: detectedMime,
+                    data: cleanBase64,
                   },
                 },
-                replacementItems: {
-                  type: Type.ARRAY,
-                  description: "List of any replacement, damaged, or returned items noted on the memo/page",
+                { text: prompt },
+              ],
+            },
+            config: {
+              systemInstruction,
+              responseMimeType: "application/json",
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  docType: { type: Type.STRING, description: "PURCHASE or SALE or REPLACEMENT_RETURN or SALE_WITH_REPLACEMENT" },
+                  supplierName: { type: Type.STRING, description: "Supplier or company name" },
+                  retailerName: { type: Type.STRING, description: "Retailer, shop, or customer name" },
+                  supplierContact: { type: Type.STRING, description: "Supplier or customer contact phone" },
+                  invoiceNumber: { type: Type.STRING, description: "Invoice, Challan, or Memo number" },
+                  previousDoNo: { type: Type.STRING, description: "Previous D.O. Number (পূর্বের ডিও নং) if printed or referenced" },
+                  previousDoDate: { type: Type.STRING, description: "Previous D.O. Date (পূর্বের ডিও তারিখ) in YYYY-MM-DD if printed" },
+                  invoiceDate: { type: Type.STRING, description: "Invoice date in YYYY-MM-DD" },
+                  replacementReason: { type: Type.STRING, description: "Reason if replacement/return slip (e.g. EXPIRED, DAMAGED_PACKAGING, LEAKAGE_BROKEN, OTHER)" },
                   items: {
-                    type: Type.OBJECT,
-                    properties: {
-                      name: { type: Type.STRING, description: "Product name returned or replaced" },
-                      quantity: { type: Type.NUMBER, description: "Quantity returned" },
-                      unit: { type: Type.STRING, description: "Unit" },
-                      reason: { type: Type.STRING, description: "Defect or return reason" },
-                      value: { type: Type.NUMBER, description: "Value or adjustment amount in BDT" },
+                    type: Type.ARRAY,
+                    description: "List of all product items in the invoice table",
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        name: { type: Type.STRING, description: "Full product name as written" },
+                        sku: { type: Type.STRING, description: "Product code or SKU if available" },
+                        category: { type: Type.STRING, description: "Product category" },
+                        quantity: { type: Type.NUMBER, description: "Quantity" },
+                        unit: { type: Type.STRING, description: "Unit of measurement (Pcs, Box, Ctn, Bag, Kg, Ltr, Dzn)" },
+                        costPrice: { type: Type.NUMBER, description: "Purchase or selling price per unit in BDT" },
+                        suggestedRetailPrice: { type: Type.NUMBER, description: "Suggested retail selling price" },
+                        totalPrice: { type: Type.NUMBER, description: "Total line price in BDT" },
+                      },
                     },
                   },
+                  replacementItems: {
+                    type: Type.ARRAY,
+                    description: "List of any replacement, damaged, or returned items noted on the memo/page",
+                    items: {
+                      type: Type.OBJECT,
+                      properties: {
+                        name: { type: Type.STRING, description: "Product name returned or replaced" },
+                        quantity: { type: Type.NUMBER, description: "Quantity returned" },
+                        unit: { type: Type.STRING, description: "Unit" },
+                        reason: { type: Type.STRING, description: "Defect or return reason" },
+                        value: { type: Type.NUMBER, description: "Value or adjustment amount in BDT" },
+                      },
+                    },
+                  },
+                  replacementDeduction: { type: Type.NUMBER, description: "Total deduction value for replacement items" },
+                  subtotal: { type: Type.NUMBER },
+                  discount: { type: Type.NUMBER },
+                  tax: { type: Type.NUMBER },
+                  totalAmount: { type: Type.NUMBER },
+                  paidAmount: { type: Type.NUMBER, description: "Paid amount in cash or digital payment" },
+                  dueAmount: { type: Type.NUMBER, description: "Remaining due or credit balance" },
+                  paymentStatus: { type: Type.STRING },
+                  paymentMethod: { type: Type.STRING },
+                  notes: { type: Type.STRING },
                 },
-                replacementDeduction: { type: Type.NUMBER, description: "Total deduction value for replacement items" },
-                subtotal: { type: Type.NUMBER },
-                discount: { type: Type.NUMBER },
-                tax: { type: Type.NUMBER },
-                totalAmount: { type: Type.NUMBER },
-                paidAmount: { type: Type.NUMBER, description: "Paid amount in cash or digital payment" },
-                dueAmount: { type: Type.NUMBER, description: "Remaining due or credit balance" },
-                paymentStatus: { type: Type.STRING },
-                paymentMethod: { type: Type.STRING },
-                notes: { type: Type.STRING },
               },
             },
-          },
-        });
+          });
 
-        const response = await Promise.race([responsePromise, timeoutPromise]);
+          const response = await Promise.race([responsePromise, timeoutPromise]);
 
-        const responseText = response.text || "{}";
-        let parsed: any = null;
-        try {
-          parsed = JSON.parse(responseText);
-        } catch {
-          const match = responseText.match(/\{[\s\S]*\}/);
-          if (match) parsed = JSON.parse(match[0]);
-        }
-
-        if (parsed && Array.isArray(parsed.items) && parsed.items.length > 0) {
-          // Normalize and cleanse extracted items
-          const cleanedItems = parsed.items
-            .filter((it: any) => it && (it.name || it.description || it.productName))
-            .map((it: any, idx: number) => {
-              const rawName = String(it.name || it.description || it.productName || `Item ${idx + 1}`).trim();
-              const qty = Math.max(1, parseBanglaNumber(it.quantity) || 1);
-              let cost = parseBanglaNumber(it.costPrice || it.rate || it.unitPrice || 0);
-              let total = parseBanglaNumber(it.totalPrice || it.amount || it.total || 0);
-
-              if (cost === 0 && total > 0) {
-                cost = Math.round(total / qty);
-              } else if (total === 0 && cost > 0) {
-                total = Math.round(cost * qty);
-              }
-
-              const retail = parseBanglaNumber(it.suggestedRetailPrice) || Math.round(cost * 1.15);
-              const category = it.category || inferProductCategory(rawName);
-
-              return {
-                name: rawName,
-                sku: it.sku || `SKU-${Date.now().toString().slice(-4)}${idx + 1}`,
-                category: category,
-                quantity: qty,
-                unit: it.unit || "Pcs",
-                costPrice: cost,
-                suggestedRetailPrice: retail,
-                totalPrice: total,
-              };
-            });
-
-          if (cleanedItems.length > 0) {
-            const calculatedTotal = cleanedItems.reduce((s: number, i: any) => s + (i.totalPrice || 0), 0);
-            parsed.items = cleanedItems;
-            parsed.totalAmount = parseBanglaNumber(parsed.totalAmount) || calculatedTotal;
-            parsed.subtotal = parseBanglaNumber(parsed.subtotal) || calculatedTotal;
-            parsed.paidAmount = parseBanglaNumber(parsed.paidAmount) || 0;
-            parsed.dueAmount = parseBanglaNumber(parsed.dueAmount) || Math.max(0, parsed.totalAmount - parsed.paidAmount);
-            parsed.supplierName = parsed.supplierName || "Direct Supplier";
-            parsed.retailerName = parsed.retailerName ? String(parsed.retailerName).trim() : "";
-            
-            const rawDocType = String(parsed.docType || targetDocType || "").toUpperCase();
-            if (rawDocType.includes("SALE") || rawDocType.includes("SELL") || rawDocType.includes("বিক্রয়") || rawDocType.includes("মেমো")) {
-              parsed.docType = rawDocType.includes("REPLACE") ? "SALE_WITH_REPLACEMENT" : "SALE";
-            } else if (rawDocType.includes("REPLACE") || rawDocType.includes("RETURN") || rawDocType.includes("ড্যামেজ") || rawDocType.includes("নষ্ট")) {
-              parsed.docType = "REPLACEMENT_RETURN";
-            } else if (rawDocType.includes("PURCHASE") || rawDocType.includes("CHALLAN") || rawDocType.includes("চালান") || rawDocType.includes("ক্রয়")) {
-              parsed.docType = "PURCHASE";
-            } else {
-              parsed.docType = targetDocType || "PURCHASE";
-            }
-            parsed.replacementReason = parsed.replacementReason ? String(parsed.replacementReason).trim() : "";
-            
-            // Clean & normalize replacement items if found on the memo/khata
-            if (Array.isArray(parsed.replacementItems)) {
-              parsed.replacementItems = parsed.replacementItems
-                .map((rep: any, rIdx: number) => ({
-                  name: String(rep.name || rep.productName || `Replacement Item ${rIdx + 1}`).trim(),
-                  quantity: Math.max(1, parseBanglaNumber(rep.quantity) || 1),
-                  unit: rep.unit || "Pcs",
-                  reason: rep.reason || rep.defect || "ড্যামেজ / নষ্ট / মেয়াদোত্তীর্ণ",
-                  value: parseBanglaNumber(rep.value || rep.amount || 0),
-                }))
-                .filter((rep: any) => rep.name);
-            } else {
-              parsed.replacementItems = [];
-            }
-            parsed.replacementDeduction = parseBanglaNumber(parsed.replacementDeduction) ||
-              parsed.replacementItems.reduce((acc: number, item: any) => acc + (item.value || 0), 0);
-
-            parsed.invoiceNumber = parsed.invoiceNumber || `INV-${Date.now().toString().slice(-6)}`;
-            parsed.previousDoNo = parsed.previousDoNo ? String(parsed.previousDoNo).trim() : "";
-            parsed.previousDoDate = parsed.previousDoDate ? normalizeInvoiceDate(parsed.previousDoDate) : "";
-            parsed.invoiceDate = normalizeInvoiceDate(parsed.invoiceDate);
-
-            extractedData = parsed;
-            scanSource = modelName;
-            break;
+          const responseText = response.text || "{}";
+          let parsed: any = null;
+          try {
+            parsed = JSON.parse(responseText);
+          } catch {
+            const match = responseText.match(/\{[\s\S]*\}/);
+            if (match) parsed = JSON.parse(match[0]);
           }
-        }
-      } catch (err: any) {
-        lastError = err;
-        const isTemporaryHighDemand =
-          err?.status === "UNAVAILABLE" ||
-          err?.status === 503 ||
-          err?.message?.includes("503") ||
-          err?.message?.includes("high demand") ||
-          err?.message?.includes("429") ||
-          err?.message?.includes("RESOURCE_EXHAUSTED");
 
-        if (isTemporaryHighDemand) {
-          // Gracefully continue to next fallback candidate
-          await new Promise((r) => setTimeout(r, 200));
-        } else {
-          console.warn(`Scan model ${modelName} attempt:`, err?.message || err);
+          if (parsed && Array.isArray(parsed.items) && parsed.items.length > 0) {
+            // Normalize and cleanse extracted items
+            const cleanedItems = parsed.items
+              .filter((it: any) => it && (it.name || it.description || it.productName))
+              .map((it: any, idx: number) => {
+                const rawName = String(it.name || it.description || it.productName || `Item ${idx + 1}`).trim();
+                const qty = Math.max(1, parseBanglaNumber(it.quantity) || 1);
+                let cost = parseBanglaNumber(it.costPrice || it.rate || it.unitPrice || 0);
+                let total = parseBanglaNumber(it.totalPrice || it.amount || it.total || 0);
+
+                if (cost === 0 && total > 0) {
+                  cost = Math.round(total / qty);
+                } else if (total === 0 && cost > 0) {
+                  total = Math.round(cost * qty);
+                }
+
+                const retail = parseBanglaNumber(it.suggestedRetailPrice) || Math.round(cost * 1.15);
+                const category = it.category || inferProductCategory(rawName);
+
+                return {
+                  name: rawName,
+                  sku: it.sku || `SKU-${Date.now().toString().slice(-4)}${idx + 1}`,
+                  category: category,
+                  quantity: qty,
+                  unit: it.unit || "Pcs",
+                  costPrice: cost,
+                  suggestedRetailPrice: retail,
+                  totalPrice: total,
+                };
+              });
+
+            if (cleanedItems.length > 0) {
+              const calculatedTotal = cleanedItems.reduce((s: number, i: any) => s + (i.totalPrice || 0), 0);
+              parsed.items = cleanedItems;
+              parsed.totalAmount = parseBanglaNumber(parsed.totalAmount) || calculatedTotal;
+              parsed.subtotal = parseBanglaNumber(parsed.subtotal) || calculatedTotal;
+              parsed.paidAmount = parseBanglaNumber(parsed.paidAmount) || 0;
+              parsed.dueAmount = parseBanglaNumber(parsed.dueAmount) || Math.max(0, parsed.totalAmount - parsed.paidAmount);
+              parsed.supplierName = parsed.supplierName || "Direct Supplier";
+              parsed.retailerName = parsed.retailerName ? String(parsed.retailerName).trim() : "";
+              
+              const rawDocType = String(parsed.docType || targetDocType || "").toUpperCase();
+              if (rawDocType.includes("SALE") || rawDocType.includes("SELL") || rawDocType.includes("বিক্রয়") || rawDocType.includes("মেমো")) {
+                parsed.docType = rawDocType.includes("REPLACE") ? "SALE_WITH_REPLACEMENT" : "SALE";
+              } else if (rawDocType.includes("REPLACE") || rawDocType.includes("RETURN") || rawDocType.includes("ড্যামেজ") || rawDocType.includes("নষ্ট")) {
+                parsed.docType = "REPLACEMENT_RETURN";
+              } else if (rawDocType.includes("PURCHASE") || rawDocType.includes("CHALLAN") || rawDocType.includes("চালান") || rawDocType.includes("ক্রয়")) {
+                parsed.docType = "PURCHASE";
+              } else {
+                parsed.docType = targetDocType || "PURCHASE";
+              }
+              parsed.replacementReason = parsed.replacementReason ? String(parsed.replacementReason).trim() : "";
+              
+              // Clean & normalize replacement items if found on the memo/khata
+              if (Array.isArray(parsed.replacementItems)) {
+                parsed.replacementItems = parsed.replacementItems
+                  .map((rep: any, rIdx: number) => ({
+                    name: String(rep.name || rep.productName || `Replacement Item ${rIdx + 1}`).trim(),
+                    quantity: Math.max(1, parseBanglaNumber(rep.quantity) || 1),
+                    unit: rep.unit || "Pcs",
+                    reason: rep.reason || rep.defect || "ড্যামেজ / নষ্ট / মেয়াদোত্তীর্ণ",
+                    value: parseBanglaNumber(rep.value || rep.amount || 0),
+                  }))
+                  .filter((rep: any) => rep.name);
+              } else {
+                parsed.replacementItems = [];
+              }
+              parsed.replacementDeduction = parseBanglaNumber(parsed.replacementDeduction) ||
+                parsed.replacementItems.reduce((acc: number, item: any) => acc + (item.value || 0), 0);
+
+              parsed.invoiceNumber = parsed.invoiceNumber || `INV-${Date.now().toString().slice(-6)}`;
+              parsed.previousDoNo = parsed.previousDoNo ? String(parsed.previousDoNo).trim() : "";
+              parsed.previousDoDate = parsed.previousDoDate ? normalizeInvoiceDate(parsed.previousDoDate) : "";
+              parsed.invoiceDate = normalizeInvoiceDate(parsed.invoiceDate);
+
+              extractedData = parsed;
+              scanSource = `${modelName} (${keyName})`;
+              break;
+            }
+          }
+        } catch (err: any) {
+          lastError = err;
+          const isTemporaryHighDemand =
+            err?.status === "UNAVAILABLE" ||
+            err?.status === 503 ||
+            err?.message?.includes("503") ||
+            err?.message?.includes("high demand") ||
+            err?.message?.includes("429") ||
+            err?.message?.includes("RESOURCE_EXHAUSTED");
+
+          if (isTemporaryHighDemand) {
+            // Gracefully continue to next fallback candidate
+            await new Promise((r) => setTimeout(r, 200));
+          } else {
+            console.warn(`Scan model ${modelName} (${keyName}) attempt:`, err?.message || err);
+          }
         }
       }
     }
 
-    // Pass 2: If structured schema failed, try direct unstructured text extraction & JSON markdown parsing
+    // Pass 2: If structured schema failed, try direct unstructured text extraction & JSON markdown parsing across API keys
     if (!extractedData) {
-      for (const fallbackModel of ["gemini-flash-lite-latest", "gemini-3.1-flash-lite", "gemini-3.5-flash"]) {
+      for (const { keyName, client: ai } of aiInstances) {
         if (extractedData) break;
-        try {
-          const fallbackPrompt = `Examine this invoice/challan image. Transcribe all table rows and details. Output a JSON object in this format:
+        for (const fallbackModel of ["gemini-flash-lite-latest", "gemini-3.1-flash-lite", "gemini-3.5-flash"]) {
+          if (extractedData) break;
+          try {
+            const fallbackPrompt = `Examine this invoice/challan image. Transcribe all table rows and details. Output a JSON object in this format:
 \`\`\`json
 {
   "supplierName": "Name of Company / Supplier",
@@ -1270,28 +1288,28 @@ RULES FOR ACCURACY:
 }
 \`\`\``;
 
-          const timeoutPromise = new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error(`Pass 2 Timeout on model ${fallbackModel}`)), 12000)
-          );
+            const timeoutPromise = new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error(`Pass 2 Timeout on model ${fallbackModel} (${keyName})`)), 12000)
+            );
 
-          const responsePromise = ai.models.generateContent({
-            model: fallbackModel,
-            contents: {
-              parts: [
-                {
-                  inlineData: {
-                    mimeType: detectedMime,
-                    data: cleanBase64,
+            const responsePromise = ai.models.generateContent({
+              model: fallbackModel,
+              contents: {
+                parts: [
+                  {
+                    inlineData: {
+                      mimeType: detectedMime,
+                      data: cleanBase64,
+                    },
                   },
-                },
-                { text: fallbackPrompt },
-              ],
-            },
-          });
+                  { text: fallbackPrompt },
+                ],
+              },
+            });
 
-          const response = await Promise.race([responsePromise, timeoutPromise]);
+            const response = await Promise.race([responsePromise, timeoutPromise]);
 
-          const text = response.text || "";
+            const text = response.text || "";
           const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/) || text.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
             const parsed = JSON.parse(jsonMatch[1] || jsonMatch[0]);
@@ -1325,13 +1343,14 @@ RULES FOR ACCURACY:
                 parsed.invoiceDate = normalizeInvoiceDate(parsed.invoiceDate);
 
                 extractedData = parsed;
-                scanSource = `${fallbackModel}-unstructured`;
+                scanSource = `${fallbackModel}-unstructured (${keyName})`;
                 break;
               }
             }
           }
         } catch (fErr: any) {
-          // Continue to next fallback model
+            // Continue to next fallback model
+          }
         }
       }
     }
